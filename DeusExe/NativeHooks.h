@@ -1,9 +1,14 @@
 #pragma once
 
+#include "Misc.h"
+
 class CNativeHooks
 {
 public:
     explicit CNativeHooks(const wchar_t* const pszIniSection);
+    ~CNativeHooks();
+    CNativeHooks(const CNativeHooks&) = delete;
+    CNativeHooks& operator=(const CNativeHooks&) = delete;
 
     class CFixBase //So instances can share container
     {
@@ -28,8 +33,11 @@ public:
             GNatives[iNativeId] = reinterpret_cast<Native>(&CFixBaseT<FixerClass, UnrealClass, iNativeId>::ReplacementFuncInternal);
             GLog->Logf(L"Installing hook '%s'.", pszName);
 
-            //We add ourselves to the parent, that way the native function id doesn't have to be exposed
-            GetSingleton().m_ActiveHooks.emplace(iNativeId, std::unique_ptr<CFixBase>(this));
+            //We add ourselves to the parent, that way the native function id doesn't have to be exposed.
+            //Assigning into the slot, not emplace(): a rejected emplace would destroy the temporary and delete us mid-construction.
+            std::unique_ptr<CFixBase>& pSlot = GetSingleton().m_ActiveHooks[iNativeId];
+            assert(!pSlot); //Two fixes can't hook the same native
+            pSlot.reset(this);
         }
 
     private:
@@ -37,11 +45,18 @@ public:
         void ReplacementFuncInternal(FFrame& Stack, RESULT_DECL)
         {
             //At this point our 'this' pointer points to an Unreal object, not the fix object, so get its pointer.
-            assert(CNativeHooks::GetSingleton().m_ActiveHooks.find(iNativeId) != std::cend(GetSingleton().sm_pSingleton->m_ActiveHooks));
+            assert(GetSingleton().m_ActiveHooks.find(iNativeId) != GetSingleton().m_ActiveHooks.cend());
             CFixBase* const pContext = CNativeHooks::GetSingleton().m_ActiveHooks.at(iNativeId).get();
             assert(pContext);
 
-            static_cast<FixerClass&>(*this).ReplacementFunc(reinterpret_cast<UnrealClass&>(*this), static_cast<FixerClass&>(*pContext), Stack, Result);
+            //Crash trace: the object this native runs on and the script function driving it.
+            if(Misc::IsVerboseLogging())
+            {
+                Misc::SetScriptTrace(reinterpret_cast<UObject*>(this), Stack.Node);
+            }
+  
+            //Called through the class, not through 'this': that would form a reference to an object of the wrong type.
+            FixerClass::ReplacementFunc(reinterpret_cast<UnrealClass&>(*this), static_cast<FixerClass&>(*pContext), Stack, Result);
         }
 
         const Native m_OrigFunc;

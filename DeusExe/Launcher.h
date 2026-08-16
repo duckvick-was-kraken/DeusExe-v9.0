@@ -1,10 +1,11 @@
 #pragma once
 
+class CPluginManager;
 
 class CLauncher : private FExecHook
 {
 public:
-    explicit CLauncher();
+    explicit CLauncher(CPluginManager& Plugins);
     CLauncher(const CLauncher&) = delete;
     CLauncher& operator=(const CLauncher&) = delete;
 
@@ -13,6 +14,9 @@ private:
     void MainLoop(UEngine * const pEngine);
     void LoadSettings();
     void ToggleBorderlessWindowedFullscreen();
+    void SetCursorHidden(const bool bHide);
+    void ReleaseCursor(); //!< Undoes any clipping/hiding we applied, so the cursor is never left confined or invisible
+    static LRESULT CALLBACK ViewportSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
     HWND m_hWnd = NULL;
 
@@ -22,6 +26,7 @@ private:
     UViewport* m_pViewPort = nullptr; //If user closes window, viewport disappears before we get WM_QUIT
     bool m_bPrevInMenu = false;
     bool m_bInBorderlessFullscreenWindow = false;
+    bool m_bCursorClipped = false;
 
     //Settings
     float m_fFPSLimit = 120.0f; //Because GetMaxTickRate() is float
@@ -33,6 +38,6 @@ private:
 
 //From FExec
 private:
-    UBOOL Exec(const TCHAR* Cmd, FOutputDevice& Ar);
+    UBOOL Exec(const TCHAR* Cmd, FOutputDevice& Ar) override;
 
 };

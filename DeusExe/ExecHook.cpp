@@ -1,15 +1,17 @@
 #include "stdafx.h"
 #include "ExecHook.h"
 
-FExecHook::FExecHook()
-{
-
-}
-
-
 FExecHook::~FExecHook()
 {
-
+    //The engine owns these windows and they can outlive us, so don't leave them calling back into freed memory
+    if( m_pPreferences )
+    {
+        m_pPreferences->SetNotifyHook( nullptr );
+    }
+    if( m_pEditActor )
+    {
+        m_pEditActor->SetNotifyHook( nullptr );
+    }
 }
 
 void FExecHook::NotifyDestroy( void* Src )
@@ -17,6 +19,10 @@ void FExecHook::NotifyDestroy( void* Src )
     if( Src==m_pPreferences )
     {
         m_pPreferences = nullptr;
+    }
+    else if( Src==m_pEditActor )
+    {
+        m_pEditActor = nullptr;
     }
 }
 
@@ -44,11 +50,12 @@ UBOOL FExecHook::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
     else if( ParseCommand(&Cmd,TEXT("EditActor")) )
     {
         UClass* Class;
+        FName ActorName;
         TObjectIterator<UEngine> EngineIt;
+        const AActor* Found = NULL;
         if( EngineIt && ParseObject<UClass>( Cmd, TEXT("Class="), Class, ANY_PACKAGE ) )
         {
-            const AActor* Player  = EngineIt->Client ? EngineIt->Client->Viewports(0)->Actor : NULL;
-            const AActor* Found   = NULL;
+            const AActor* Player  = EngineIt->Client && EngineIt->Client->Viewports.Num() ? EngineIt->Client->Viewports(0)->Actor : NULL;
             FLOAT   MinDist = 999999.0f;
             for( TObjectIterator<AActor> It; It; ++It )
             {
@@ -59,16 +66,41 @@ UBOOL FExecHook::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
                     Found   = *It;
                 }
             }
-            if( Found )
-            {
-                WObjectProperties* P = new WObjectProperties( TEXT("EditActor"), 0, TEXT(""), NULL, 1 );
-                P->OpenWindow( (HWND)EngineIt->Client->Viewports(0)->GetWindow() );
-                P->Root.SetObjects( (UObject**)&Found, 1 );
-                P->Show(1);
-            }
-            else Ar.Logf( TEXT("Actor not found") );
         }
-        else Ar.Logf( TEXT("Missing class") );
+        else if( EngineIt && Parse( Cmd, TEXT("Name="), ActorName ) )
+        {
+            for( TObjectIterator<AActor> It; It; ++It )
+            {
+                if( !It->bDeleteMe && It->GetName()==*ActorName )
+                {
+                    Found = *It;
+                    break;
+                }
+            }
+        }
+        if( Found )
+        {
+            //Exclusive fullscreen can't show an overlapping tool window (DirectDraw minimizes the game on focus loss), so drop to windowed first.
+            UViewport* const Viewport = EngineIt->Client && EngineIt->Client->Viewports.Num() ? EngineIt->Client->Viewports(0) : NULL;
+            if( Viewport && Viewport->IsFullscreen() )
+            {
+                Viewport->Exec( TEXT("ToggleFullscreen") );
+                m_bRestoreFullscreenOnToolClose = true; //Only ever latched here; the main loop clears it once the window closes
+            }
+            if( !m_pEditActor ) //Reuse it: a second window would orphan the first and take over the tool window tracking below
+            {
+                m_pEditActor = new WObjectProperties( TEXT("EditActor"), 0, TEXT(""), NULL, 1 );
+                m_pEditActor->SetNotifyHook( this );
+                m_pEditActor->OpenWindow( Viewport ? (HWND)Viewport->GetWindow() : NULL );
+            }
+            m_pEditActor->Root.SetObjects( (UObject**)&Found, 1 );
+            m_pEditActor->Show(1);
+            m_hToolWindow = m_pEditActor->hWnd; //Let the main loop restore input when this window closes
+        }
+        else
+        {
+            Ar.Logf( TEXT("Bad or missing class or name") );
+        }
         return TRUE;
     }
     else if( ParseCommand(&Cmd,TEXT("HideLog")) )

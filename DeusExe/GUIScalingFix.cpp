@@ -56,7 +56,10 @@ void CGUIScalingFix::ReplacementFunc(const APlayerPawnExt& PlayerPawnThis, CGUIS
     };
 
     XRootWindow* const pRoot = PlayerPawnThis.rootWindow;
-    assert(pRoot);
+    if (!pRoot || !pCanvas) //Script can pass None
+    {
+        return;
+    }
     RootHack* const pHack = static_cast<RootHack*>(pRoot);
     pHack->ApplyScaling(pCanvas, Context);
 }

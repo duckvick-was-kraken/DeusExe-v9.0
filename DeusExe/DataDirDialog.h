@@ -7,14 +7,14 @@
 class CDataDirDialog
 {
 public:
-    explicit CDataDirDialog();
-    virtual ~CDataDirDialog();
-    bool Show(const HWND hWndParent) const;
+    bool Show(const HWND hWndParent);
 
 private:
     void ProcessDirFiles(const wchar_t* const pszDir, const wchar_t* const pszRelDir);
-    void SearchDirs(const wchar_t* pszTargetDir, const wchar_t* const pszRootDir);
-    
+    void SearchDirs(const wchar_t* const pszTargetDir, const wchar_t* const pszRootDir, const size_t iDepth = 0);
+
+    static constexpr size_t sm_iMaxSearchDepth = 64; //Long pathname would exhaust the stack
+
     /**
     Finds the items from the default.ini file
     */
@@ -34,7 +34,7 @@ private:
 
     static const wchar_t* const sm_pszPaths;
 
-    HWND m_hWnd;
+    HWND m_hWnd = NULL;
     CFancyTreeView m_TreeView;
 
     // This is used so the top-level dirs (Shifter, HDTP) are first added to the list. However, their contents are added in the order they're on disk.
