@@ -1,4 +1,4 @@
-# Deus Exe
+# Deus Exe Readme
 
 See also: <http://kentie.net/article/dxguide>
 
@@ -62,13 +62,6 @@ The entry point is called once per event, with a context holding the command lin
 
 - Deus Exe runs with Data Execution Prevention (DEP) disabled, both in the executable's headers and at start-up. The game's 'Galaxy' audio subsystem executes code from data pages and crashes otherwise. This is logged to the game log.
 
-## Known issues / left to fix / todo
-
-Unless marked as [Deus Exe], this is an issue with the original game.
-
-- In full-screen mode, when opening a menu for the first time after a level switch, the mouse cursor will be positioned in the top-left corner.
-- Keyboard unresponsive after alt+tab in windowed mode.
-
 ## Changelog
 
 ### Version 9 (august 6, 2026)
@@ -78,7 +71,7 @@ Unless marked as [Deus Exe], this is an issue with the original game.
 - Added plugin support: DLLs listed in 'PluginList.ini' are loaded before the game starts and are notified at each step of the start-up. See 'Plugins' above.
 - Conversation packages ('DeusExCon\*.u') in a data directory now override the copies in 'System'. The game loads these by bare name and keeps the first copy it reads for the whole session, so previously the 'System' copy could win and a mod's conversations would be ignored.
 - Localization (.int) overrides are now applied from the very first file access. The game reads some .int files, notably its own 'DeusEx.int', before the data directory list used to be built, and as it keeps whatever it reads first, a mod's .int file could end up unused.
-- Rewrote the frame limiter. Moved the limiter to the end of the loop to create consistent frame timings and resolves timing-sensitive bugs (such as DX10 inventory screen hang). The game is now ticked every iteration with the actually elapsed time, and the frame rate is capped by sleeping away the remainder of the frame instead of by skipping ticks. The game's own maximum tick rate (e.g. a server's) is taken into account as well.
+- Rewrote the frame limiter. The game is now ticked every iteration with the actually elapsed time, and the frame rate is capped by sleeping away the remainder of the frame instead of by skipping ticks. The game's own maximum tick rate (e.g. a server's) is taken into account as well.
 - The engine's current tick rate is now updated, so in-game frame rate displays show a value again.
 - Alt+Tab and focus fixes:
   - The game is restored when a renderer left it minimized after switching back to it.
@@ -92,10 +85,8 @@ Unless marked as [Deus Exe], this is an issue with the original game.
 - The FPS limit is now also written to 'dxgi.maxFrameRate' and 'd3d9.maxFrameRate' in 'dxvk.conf', if such a file is present in the 'System' directory.
 - The checkboxes in the 'Data Directories' dialog are now drawn and handled by Deus Exe itself, so checking a directory also (un)checks its subdirectories when running under WINE/Proton.
 - The 'Data Directories' dialog now recognizes localization files regardless of how the extension is capitalized, so a '.INT' entry is no longer treated as a package directory.
-- Added an 'Enable verbose logging' option to the configuration dialog, which makes it into a livelog and not a buffered log.
-  - Attempts to trace back every faulting function.
-  - Catches map changes and prints the loading stages.
-  - Logs UE's call history (msgbox) to the logfile on fatal fault.
+- The game log is a lot more useful when something goes wrong. Level changes, queued travel and the engine's loading progress are logged, and a crash report now names the module and offset that faulted, what the faulting instruction was doing, and which map and loading stage the game was in. The engine's own call history, previously only shown in a message box, ends up in the log as well.
+- Added an 'Enable verbose logging' option to the configuration dialog. It timestamps every log line and writes it to disk as it happens, so the lines leading up to a crash are no longer lost in a buffer, and it records the object and script function behind the last hooked native call for the crash report. It is off by default, as logging this way costs performance.
 - Switched to Visual Studio 2022, make sure to [update your runtimes](https://aka.ms/vs/17/release/vc_redist.x86.exe).
 
 ### Version 8.1 (februari 20, 2016)

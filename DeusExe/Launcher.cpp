@@ -232,10 +232,7 @@ CLauncher::CLauncher(CPluginManager& Plugins)
                 }
             }
 
-            if (m_hWnd)
-            {
-                SetWindowSubclass(m_hWnd, &CLauncher::ViewportSubclassProc, 0, reinterpret_cast<DWORD_PTR>(this));
-            }
+            AttachViewportSubclass(); //Deferred while Direct3D owns the window procedure; the main loop keeps retrying
 
             //Seed from the viewport size, which is what the main loop tracks; the client rect can differ in borderless mode
             if (GIsClient && m_bAutoFov && m_pViewPort && m_pViewPort->SizeX > 0 && m_pViewPort->SizeY > 0)
@@ -273,6 +270,11 @@ CLauncher::CLauncher(CPluginManager& Plugins)
 
 }
 
+CLauncher::~CLauncher()
+{
+    DetachViewportSubclass(); //The viewport window outlives us: engine shutdown only runs after this
+}
+
 void CLauncher::ApplyAutoFOV(const size_t iSizeX, const size_t iSizeY)
 {
     assert(m_iSizeX != iSizeX || m_iSizeY != iSizeY);
@@ -284,6 +286,21 @@ void CLauncher::ApplyAutoFOV(const size_t iSizeX, const size_t iSizeY)
     m_pViewPort->Exec(szCmd);
     m_iSizeX = iSizeX;
     m_iSizeY = iSizeY;
+}
+
+namespace
+{
+    //The menu cursor lives in root window coordinates, which are the client area divided by the GUI scale the game
+    //picks for the resolution. hMultiplier is protected, so reach it through a derived class like the GUI scaling fix does.
+    INT GetGUIScale(XRootWindow& Root)
+    {
+        class RootHack : public XRootWindow
+        {
+        public:
+            INT GetScale() { return hMultiplier > 0 ? hMultiplier : 1; } //Zero until the root has been sized to the canvas once
+        };
+        return static_cast<RootHack&>(Root).GetScale();
+    }
 }
 
 void CLauncher::MainLoop(UEngine* const pEngine)
@@ -349,17 +366,14 @@ void CLauncher::MainLoop(UEngine* const pEngine)
             const HWND hViewportWindow = static_cast<HWND>(m_pViewPort->GetWindow());
             if(hViewportWindow != NULL && hViewportWindow != m_hWnd)
             {
-                if(m_hWnd != NULL)
-                {
-                    RemoveWindowSubclass(m_hWnd, &CLauncher::ViewportSubclassProc, 0);
-                }
+                DetachViewportSubclass();
                 m_hWnd = hViewportWindow;
                 if(m_bRawInput)
                 {
                     RegisterRawInput(m_hWnd);
                 }
-                SetWindowSubclass(m_hWnd, &CLauncher::ViewportSubclassProc, 0, reinterpret_cast<DWORD_PTR>(this));
             }
+            AttachViewportSubclass(); //Not necessarily possible right away, so retry until it is
         }
 
         //GetCursorPos fails while another desktop is active (UAC prompt, locked workstation), leaving the point unset
@@ -368,6 +382,17 @@ void CLauncher::MainLoop(UEngine* const pEngine)
         const bool bMouseOverWindow = bHaveCursorPos && WindowFromPoint(CursorPos) == m_hWnd;
         const HWND hForeground = GetForegroundWindow();
         const bool bHasFocus = m_hWnd != NULL && hForeground == m_hWnd;
+
+        //A key held while focus goes away never gets its release message, so the engine keeps it down: alt+tab alone
+        //leaves alt stuck. Clear the input state on both edges, so nothing is held while away and nothing is stuck on return.
+        if(bHasFocus != m_bPrevHasFocus)
+        {
+            m_bPrevHasFocus = bHasFocus;
+            if(m_pViewPort && m_pViewPort->Input)
+            {
+                m_pViewPort->Input->ResetInput();
+            }
+        }
 
         //A renderer can leave the game stuck minimized after alt+tabbing back into fullscreen. Restore when our process
         //owns the foreground but the viewport is still iconic, so we don't fight an intentional alt+tab away.
@@ -445,9 +470,24 @@ void CLauncher::MainLoop(UEngine* const pEngine)
             {
                 if (m_pViewPort->IsFullscreen() && bInMenu && !m_bPrevInMenu) //Fixes that in fullscreen mode, windows mouse cursor pos isn't matched to DX menu cursor
                 {
-                    float fX, fY;
-                    pRoot->GetRootCursorPos(&fX, &fY);
-                    POINT p{static_cast<int>(fX), static_cast<int>(fY)};
+                    float fRootX, fRootY;
+                    pRoot->GetRootCursorPos(&fRootX, &fRootY);
+
+                    POINT p;
+                    if (fRootX <= 0.0f && fRootY <= 0.0f)
+                    {
+                        //A level switch gives the player a new root window, whose cursor sits at the origin until the game
+                        //moves it. Following it would park the mouse in the top-left corner, so center both cursors instead.
+                        p.x = (rClientArea.left + rClientArea.right) / 2;
+                        p.y = (rClientArea.top + rClientArea.bottom) / 2;
+                        pEngine->MousePosition(m_pViewPort, 0, static_cast<float>(p.x), static_cast<float>(p.y));
+                    }
+                    else
+                    {
+                        const INT iGUIScale = GetGUIScale(*pRoot);
+                        p.x = static_cast<int>(fRootX * iGUIScale);
+                        p.y = static_cast<int>(fRootY * iGUIScale);
+                    }
                     ClientToScreen(m_hWnd, &p);
                     SetCursorPos(p.x, p.y);
                 }
@@ -599,6 +639,7 @@ void CLauncher::MainLoop(UEngine* const pEngine)
             ReleaseCursor();
             m_pViewPort = nullptr;
             m_hWnd = NULL;
+            m_bViewportSubclassed = false; //Went away with the window (our subclass proc drops it on WM_NCDESTROY)
         }
 
         //When the EditActor window closes, re-enter the fullscreen we dropped for it: that forces WinDrv's full input
@@ -708,8 +749,71 @@ void CLauncher::ToggleBorderlessWindowedFullscreen()
     m_bInBorderlessFullscreenWindow = !m_bInBorderlessFullscreenWindow;
 }
 
+namespace
+{
+    bool IsAddressInDirect3DModule(const LONG_PTR pfnAddress)
+    {
+        if(pfnAddress == 0)
+        {
+            return false;
+        }
+
+        HMODULE hModule = NULL;
+        if(GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, reinterpret_cast<const wchar_t*>(pfnAddress), &hModule) == FALSE)
+        {
+            return false;
+        }
+
+        wchar_t szModulePath[MAX_PATH];
+        if(GetModuleFileName(hModule, szModulePath, ARRAYSIZE(szModulePath)) == 0)
+        {
+            return false;
+        }
+
+        //Covers the wrappers renderers ship as well, as those take over the same file names
+        const wchar_t* const pszModuleName = PathFindFileName(szModulePath);
+        return _wcsnicmp(pszModuleName, L"d3d", 3) == 0 || _wcsicmp(pszModuleName, L"ddraw.dll") == 0 || _wcsicmp(pszModuleName, L"dxgi.dll") == 0;
+    }
+
+    //Direct3D subclasses the focus window of a full-screen device with its own window procedure, and drops that hook
+    //again when the device is destroyed. The hook remembers the procedure it found at device creation, so anything
+    //that subclasses on top of it survives the device: our chain then still calls the hook, which dereferences the
+    //freed device and faults inside d3d9.dll on the first message after a mode change. Never subclass over such a
+    //hook; Direct3D layering itself on top of us afterwards is fine, as it unhooks cleanly.
+    bool IsWindowProcOwnedByDirect3D(const HWND hWnd)
+    {
+        //Whichever of the two doesn't match how the window's class was registered returns an internal handle rather
+        //than an address, which simply resolves to no module at all
+        return IsAddressInDirect3DModule(GetWindowLongPtrW(hWnd, GWLP_WNDPROC)) || IsAddressInDirect3DModule(GetWindowLongPtrA(hWnd, GWLP_WNDPROC));
+    }
+}
+
+void CLauncher::AttachViewportSubclass()
+{
+    if(m_bViewportSubclassed || m_hWnd == NULL)
+    {
+        return;
+    }
+
+    if(IsWindowProcOwnedByDirect3D(m_hWnd)) //Would outlive the render device and crash the game on the next mode change
+    {
+        return;
+    }
+
+    m_bViewportSubclassed = SetWindowSubclass(m_hWnd, &CLauncher::ViewportSubclassProc, 0, reinterpret_cast<DWORD_PTR>(this)) != FALSE;
+}
+
+void CLauncher::DetachViewportSubclass()
+{
+    if(m_bViewportSubclassed && m_hWnd != NULL && IsWindow(m_hWnd))
+    {
+        RemoveWindowSubclass(m_hWnd, &CLauncher::ViewportSubclassProc, 0);
+    }
+    m_bViewportSubclassed = false;
+}
+
 //Subclass proc for the WinDrv viewport window. Runs ahead of WinDrv's own proc, which we chain to via DefSubclassProc.
-LRESULT CALLBACK CLauncher::ViewportSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR /*dwRefData*/)
+LRESULT CALLBACK CLauncher::ViewportSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     switch (uMsg)
     {
@@ -729,6 +833,11 @@ LRESULT CALLBACK CLauncher::ViewportSubclassProc(HWND hWnd, UINT uMsg, WPARAM wP
         break;
 
     case WM_NCDESTROY:
+        //The launcher detaches in its destructor, so it is still around to be told the subclass is gone with the window
+        if (CLauncher* const pThis = reinterpret_cast<CLauncher*>(dwRefData))
+        {
+            pThis->m_bViewportSubclassed = false;
+        }
         RemoveWindowSubclass(hWnd, &CLauncher::ViewportSubclassProc, uIdSubclass);
         break;
     }

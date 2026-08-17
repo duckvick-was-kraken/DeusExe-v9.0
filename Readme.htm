@@ -93,11 +93,6 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 			<li>Deus Exe runs with Data Execution Prevention (DEP) disabled, both in the executable's headers and at start-up. The game's 'Galaxy' audio subsystem executes code from data pages and crashes otherwise. This is logged to the game log.</li>
 		</ul>
 
-		<h3>Known issues / left to fix / todo. Unless marked as [Deus Exe], this is an issue with the original game.</h3>
-		<ul>
-			<li>In full-screen mode, when opening a menu for the first time after a level switch, the mouse cursor will be positioned in the top-left corner.</li>
-			<li>Keyboard unresponsive after alt+tab in windowed mode</li>
-		</ul>
 		<h3>Changelog</h3>
 		<h4>Version 9 (august 6, 2026)</h4>
 		<ul>
@@ -106,7 +101,7 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 			<li>Added plugin support: DLLs listed in 'PluginList.ini' are loaded before the game starts and are notified at each step of the start-up. See 'Plugins' above.</li>
 			<li>Conversation packages ('DeusExCon*.u') in a data directory now override the copies in 'System'. The game loads these by bare name and keeps the first copy it reads for the whole session, so previously the 'System' copy could win and a mod's conversations would be ignored.</li>
 			<li>Localization (.int) overrides are now applied from the very first file access. The game reads some .int files, notably its own 'DeusEx.int', before the data directory list used to be built, and as it keeps whatever it reads first, a mod's .int file could end up unused.</li>
-			<li>Rewrote the frame limiter. Moved the limiter to the end of the loop to create consistent frame timings and resolves timing-sensitive bugs (such as DX10 inventory screen hang). The game is now ticked every iteration with the actually elapsed time, and the frame rate is capped by sleeping away the remainder of the frame instead of by skipping ticks. The game's own maximum tick rate (e.g. a server's) is taken into account as well.</li>
+			<li>Rewrote the frame limiter. The game is now ticked every iteration with the actually elapsed time, and the frame rate is capped by sleeping away the remainder of the frame instead of by skipping ticks. The game's own maximum tick rate (e.g. a server's) is taken into account as well.</li>
 			<li>The engine's current tick rate is now updated, so in-game frame rate displays show a value again.</li>
 			<li>
 				Alt+Tab and focus fixes:
