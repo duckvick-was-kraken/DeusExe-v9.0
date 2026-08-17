@@ -94,7 +94,7 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 		</ul>
 
 		<h3>Changelog</h3>
-		<h4>Version 9 (august 6, 2026)</h4>
+		<h4>Version 9 (august 17, 2026)</h4>
 		<ul>
 			<li>Added the <code>-gamename &lt;name&gt;</code> command-line option, so several mods can be played side by side without overwriting each other's configuration data, save games and settings. See 'New command-line options' above.</li>
 			<li><code>-localdata</code> and <code>-gamename</code> are now remembered when the engine relaunches itself, e.g. after a video mode change, so the same data directory keeps being used.</li>
@@ -113,6 +113,8 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 					<li>In exclusive full-screen mode the cursor is confined to the game's monitor. In a plain window it is only confined during camera control, so the window's border and title bar can still be reached while a menu is open.</li>
 					<li>The cursor is released again whenever the game loses focus or the window closes, so it is never left confined or invisible.</li>
 					<li>When the renderer recreates the game window, which happens on a video mode change, raw input and the cursor handling are re-attached to the new window.</li>
+					<li>Fixed cursor position not accounting for OTP UI Scaling, which makes the cursor not drift to the top-left corner when the game window regains focus.</li>
+					<li>Fixed modifier keys not being released on focus loss (on alt+tab and focus regain, the game missed alt release).</li>
 				</ul>
 			</li>
 			<li>The 'EditActor' command now also accepts <code>Name=&lt;actor name&gt;</code> besides <code>Class=</code>. Exclusive full-screen mode is temporarily dropped while the properties window is open, and restored &mdash; which also restores keyboard and mouse input &mdash; once it is closed.</li>
