@@ -1,4 +1,4 @@
-# Deus Exe Readme
+# Deus Exe
 
 See also: <http://kentie.net/article/dxguide>
 
@@ -64,7 +64,7 @@ The entry point is called once per event, with a context holding the command lin
 
 ## Changelog
 
-### Version 9 (august 6, 2026)
+### Version 9 (august 17, 2026)
 
 - Added the `-gamename <name>` command-line option, so several mods can be played side by side without overwriting each other's configuration data, save games and settings. See 'New command-line options' above.
 - `-localdata` and `-gamename` are now remembered when the engine relaunches itself, e.g. after a video mode change, so the same data directory keeps being used.
@@ -81,7 +81,9 @@ The entry point is called once per event, with a context holding the command lin
   - In exclusive full-screen mode the cursor is confined to the game's monitor. In a plain window it is only confined during camera control, so the window's border and title bar can still be reached while a menu is open.
   - The cursor is released again whenever the game loses focus or the window closes, so it is never left confined or invisible.
   - When the renderer recreates the game window, which happens on a video mode change, raw input and the cursor handling are re-attached to the new window.
-- The 'EditActor' command now also accepts `Name=<actor name>` besides `Class=`. Exclusive full-screen mode is temporarily dropped while the properties window is open, and restored — which also restores keyboard and mouse input — once it is closed.
+  - Fixed cursor position not accounting for OTP UI Scaling, which makes the cursor not drift to the top-left corner when the game window regains focus.
+  - Fixed modifier keys not being released on focus loss (on alt+tab and focus regain, the game missed alt release).
+- The 'EditActor' command now also accepts `Name=<actor name>` besides `Class=`.
 - The FPS limit is now also written to 'dxgi.maxFrameRate' and 'd3d9.maxFrameRate' in 'dxvk.conf', if such a file is present in the 'System' directory.
 - The checkboxes in the 'Data Directories' dialog are now drawn and handled by Deus Exe itself, so checking a directory also (un)checks its subdirectories when running under WINE/Proton.
 - The 'Data Directories' dialog now recognizes localization files regardless of how the extension is capitalized, so a '.INT' entry is no longer treated as a package directory.
