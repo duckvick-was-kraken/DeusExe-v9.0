@@ -15,8 +15,8 @@ public:
     //Used by startup dialog
     virtual bool ToModernFileName(wchar_t(&szNewName)[MAX_PATH], const wchar_t* const pszOldName, const char op = 'r');
 
-    //We new() this class before the Unreal core is started (instead of creating it on the stack) so we can use derived classes.
-    //As Unreal overrides global operator new with something that requires the core to be running, that's a catch-22 situation and we require our own new operator.
+    //We new() this class before the Unreal core is started so we can use derived classes. Unreal's global operator new
+    //requires the core to be running, hence our own.
     void* operator new(const size_t s)
     {
         return malloc(s);

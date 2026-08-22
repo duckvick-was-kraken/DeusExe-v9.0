@@ -120,7 +120,7 @@ void CFixApp::ReadSettings()
     CheckDlgButton(m_hWnd,CHK_NOMOUSEACCEL, bNoMouseAccel);
 
     //DirectSound
-    BOOL bDirectSound = TRUE;
+    BOOL bDirectSound = FALSE;
     GConfig->GetBool(L"Galaxy.GalaxyAudioSubsystem", L"UseDirectSound", bDirectSound);
     CheckDlgButton(m_hWnd,CHK_DIRECTSOUND, bDirectSound);
 
@@ -302,7 +302,6 @@ void CFixApp::ApplySettings() const
     const bool bVerboseLogging = IsDlgButtonChecked(m_hWnd, CHK_VERBOSELOGGING) != 0;
     GConfig->SetBool(PROJECTNAME, L"VerboseLogging", bVerboseLogging);
     Misc::SetVerboseLogging(bVerboseLogging);
-        
     //Renderer
     const int iRendererIndex = ComboBox_GetCurSel(m_hWndCBRenderers);
     if(iRendererIndex != CB_ERR && static_cast<size_t>(iRendererIndex) < m_Renderers.size()) //No selection if the configured renderer isn't registered
@@ -378,19 +377,18 @@ void CFixApp::UpdateDXVKConfig() const
     {
         const size_t nl = content.find('\n', pos);
         size_t bodyEnd = (nl == std::string::npos) ? content.size() : nl;
-        std::string term;
-        if(nl == std::string::npos)
+        const char* pszTerm = "";
+        if(nl != std::string::npos)
         {
-            term.clear();
-        }
-        else if(bodyEnd > pos && content[bodyEnd - 1] == '\r')
-        {
-            bodyEnd--;
-            term = "\r\n";
-        }
-        else
-        {
-            term = "\n";
+            if(bodyEnd > pos && content[bodyEnd - 1] == '\r')
+            {
+                bodyEnd--;
+                pszTerm = "\r\n";
+            }
+            else
+            {
+                pszTerm = "\n";
+            }
         }
 
         const std::string body = content.substr(pos, bodyEnd - pos);
@@ -400,13 +398,13 @@ void CFixApp::UpdateDXVKConfig() const
             result += pszKeys[k];
             result += " = ";
             result += value;
-            result += term;
+            result += pszTerm;
             bFound[k] = true;
         }
         else
         {
             result += body;
-            result += term;
+            result += pszTerm;
         }
 
         pos = (nl == std::string::npos) ? content.size() : nl + 1;
@@ -450,7 +448,6 @@ INT_PTR CALLBACK CFixApp::FixAppDialogProc(HWND hwndDlg,UINT uMsg,WPARAM wParam,
     {
     case WM_INITDIALOG:
         {
-            //Get all object oriented like
             SetProp(hwndDlg,L"this",reinterpret_cast<HANDLE>(lParam));
             pThis =  reinterpret_cast<CFixApp*>(lParam);
             pThis->m_hWnd = hwndDlg;

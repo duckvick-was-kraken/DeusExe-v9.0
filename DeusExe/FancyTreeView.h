@@ -22,7 +22,7 @@ public:
 
     /**
     Sets an item's checkbox state and propagates it: the whole subtree beneath the item is set to the same state, and every ancestor's state is recomputed (checked/half/unchecked).
-    This is done explicitly rather than by relying on TVN_ITEMCHANGED notifications, which WINE's tree-view doesn't emit for checkbox changes.
+    Done explicitly rather than through TVN_ITEMCHANGED notifications; see TreeSubclassProc.
     */
     void ApplyCheckState(const HTREEITEM hItem, const EItemState State);
 

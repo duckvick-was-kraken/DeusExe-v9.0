@@ -35,7 +35,7 @@ CPluginManager::CPluginManager(const wchar_t* const pszBaseIniSection)
     wchar_t szSystemDir[MAX_PATH];
     if (!Misc::GetGameSystemDir(szSystemDir))
     {
-        PluginLog(L"Plugin: could not determine the System directory; no plugins loaded.");
+        PluginLog(L"Plugin: no System directory; none loaded.");
         return;
     }
 
@@ -43,7 +43,7 @@ CPluginManager::CPluginManager(const wchar_t* const pszBaseIniSection)
     wchar_t szIniPath[MAX_PATH];
     if (!PathCombine(szIniPath, szSystemDir, L"PluginList.ini"))
     {
-        PluginLog(L"Plugin: could not resolve the ini path; no plugins loaded.");
+        PluginLog(L"Plugin: no ini path; none loaded.");
         return;
     }
 
@@ -90,14 +90,14 @@ CPluginManager::CPluginManager(const wchar_t* const pszBaseIniSection)
         wchar_t szFullPath[MAX_PATH];
         if (!PathCombine(szFullPath, szSystemDir, pszValue))
         {
-            PluginLog(L"Plugin: skipping '%s', resolved path too long.", pszValue);
+            PluginLog(L"Plugin: '%s' path too long.", pszValue);
             continue;
         }
 
         //Checked before loading: a module we can't track is one we can't free again
         if (m_iPluginCount >= sm_iMaxPlugins)
         {
-            PluginLog(L"Plugin: too many plugins (max %u); skipping '%s'.", static_cast<unsigned>(sm_iMaxPlugins), szFullPath);
+            PluginLog(L"Plugin: max %u plugins; skipped '%s'.", static_cast<unsigned>(sm_iMaxPlugins), szFullPath);
             continue;
         }
 
@@ -105,7 +105,7 @@ CPluginManager::CPluginManager(const wchar_t* const pszBaseIniSection)
         const HMODULE hModule = LoadLibraryEx(szFullPath, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!hModule)
         {
-            PluginLog(L"Plugin: failed to load '%s' (error %u).", szFullPath, GetLastError());
+            PluginLog(L"Plugin: '%s' failed (error %u).", szFullPath, GetLastError());
             continue;
         }
 
@@ -117,7 +117,7 @@ CPluginManager::CPluginManager(const wchar_t* const pszBaseIniSection)
         }
         else
         {
-            PluginLog(L"Plugin: loaded '%s' (no '%S' entry point; it won't receive events).", szFullPath, DEUSEXE_PLUGIN_ENTRYPOINT_NAME);
+            PluginLog(L"Plugin: loaded '%s' (no '%S' entry; no events).", szFullPath, DEUSEXE_PLUGIN_ENTRYPOINT_NAME);
         }
 
         m_Plugins[m_iPluginCount].hModule = hModule;

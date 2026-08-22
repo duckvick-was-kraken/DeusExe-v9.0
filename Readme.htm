@@ -117,7 +117,7 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 					<li>Fixed modifier keys not being released on focus loss (on alt+tab and focus regain, the game missed alt release).</li>
 				</ul>
 			</li>
-			<li>The 'EditActor' command now also accepts <code>Name=&lt;actor name&gt;</code> besides <code>Class=</code>. Exclusive full-screen mode is temporarily dropped while the properties window is open, and restored &mdash; which also restores keyboard and mouse input &mdash; once it is closed.</li>
+			<li>The 'EditActor' command now also accepts <code>Name=&lt;actor name&gt;</code> besides <code>Class=</code>.</li>
 			<li>The FPS limit is now also written to 'dxgi.maxFrameRate' and 'd3d9.maxFrameRate' in 'dxvk.conf', if such a file is present in the 'System' directory.</li>
 			<li>The checkboxes in the 'Data Directories' dialog are now drawn and handled by Deus Exe itself, so checking a directory also (un)checks its subdirectories when running under WINE/Proton.</li>
 			<li>The 'Data Directories' dialog now recognizes localization files regardless of how the extension is capitalized, so a '.INT' entry is no longer treated as a package directory.</li>
@@ -129,6 +129,7 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 					<li>Logs UE's call history (msgbox) to the logfile on fatal fault.</li>
 				</ul>
 			</li>
+			<li>Fixed raw mouse setting not being saved properly to the ini.</li>
 			<li>Switched to Visual Studio 2022, make sure to <a href="https://aka.ms/vs/17/release/vc_redist.x86.exe">update your runtimes</a>.</li>
 		</ul>
 		<h4>Version 8.1 (februari 20, 2016)</h4>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Misc.h"
+#include "CrashReport.h"
 
 class CNativeHooks
 {
@@ -22,7 +23,6 @@ public:
     public:
         ~CFixBaseT()
         {
-            //Restore original behavior
             GNatives[iNativeId] = m_OrigFunc;
         }
 
@@ -41,7 +41,6 @@ public:
         }
 
     private:
-        //The actual native function that's called
         void ReplacementFuncInternal(FFrame& Stack, RESULT_DECL)
         {
             //At this point our 'this' pointer points to an Unreal object, not the fix object, so get its pointer.
@@ -52,7 +51,7 @@ public:
             //Crash trace: the object this native runs on and the script function driving it.
             if(Misc::IsVerboseLogging())
             {
-                Misc::SetScriptTrace(reinterpret_cast<UObject*>(this), Stack.Node);
+                CrashReport::SetScriptTrace(reinterpret_cast<UObject*>(this), Stack.Node);
             }
   
             //Called through the class, not through 'this': that would form a reference to an object of the wrong type.

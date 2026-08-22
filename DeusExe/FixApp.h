@@ -16,7 +16,6 @@ private:
 
     static INT_PTR CALLBACK FixAppDialogProc(HWND hwndDlg,UINT uMsg,WPARAM wParam,LPARAM lParam);
 
-    //Constants
     static constexpr unsigned char sm_iBPP_16 = 16;
     static constexpr unsigned char sm_iBPP_32 = 32;
     static constexpr size_t sm_iFallbackResX = 320; //Only used when a field is left empty
@@ -28,7 +27,6 @@ private:
         size_t iY;
     };
 
-    //Members
     HWND m_hWnd = NULL;
     HWND m_hWndCBGUIScales = NULL;
     HWND m_hWndCBRenderers = NULL;

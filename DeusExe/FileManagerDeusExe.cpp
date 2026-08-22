@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "FileManagerDeusExe.h"
 #include "Misc.h"
+#include "CrashReport.h"
 
 const wchar_t* const FFileManagerDeusExe::sm_pszIntPaths = L"IntPaths";
 
@@ -16,7 +17,6 @@ void FFileManagerDeusExe::BuildIntPaths()
     assert(GConfig);
     //Create the container up front so a reentrant IntOverride() call can't try to build it again
     m_pIntPaths = std::make_unique<std::vector<std::wstring>>();
-    //Prepare int overrides
     TMultiMap<FString, FString>* const pSectionInt = GConfig->GetSectionPrivate(PROJECTNAME, FALSE, FALSE);
     if(pSectionInt)
     {
@@ -231,7 +231,7 @@ FArchive* FFileManagerDeusExe::CreateFileReader(const wchar_t* Filename, DWORD F
     FArchive* const pReader = FFileManagerWindows::CreateFileReader(pszResolved, Flags, Error);
     if(pReader != nullptr) //Only successful opens: package resolution probes every search path and mostly misses
     {
-        Misc::RecordFileOpen(pszResolved);
+        CrashReport::RecordFileOpen(pszResolved);
     }
     return pReader;
 }
@@ -257,7 +257,6 @@ FFileManagerDeusExeDataDir::FFileManagerDeusExeDataDir(const wchar_t* const pszD
     wcsncpy_s(m_szUserDataPath, m_szDataDir, _TRUNCATE);
     PathAppend(m_szUserDataPath, L"System"); //The games use paths relative to system, so we're doing that too.
 
-    //Get game and system directory.
     m_szSystemPath[0] = '\0';
     m_szGamePath[0] = '\0';
     m_bHaveGamePath = Misc::GetGameSystemDir(m_szSystemPath) && PathCombine(m_szGamePath, m_szSystemPath, L"..") != nullptr; //Move up from system directory
@@ -305,7 +304,7 @@ bool FFileManagerDeusExeDataDir::ToModernFileName(wchar_t(&szNewName)[MAX_PATH],
 
         //If not in game directory, abort. This facilitates how MakeDirectory() recursively creates directories
         PathCommonPrefix(szNewName,m_szGamePath,szCommonPrefix);
-        if(_wcsicmp(szCommonPrefix,m_szGamePath)!=0) //If not in game directory, don't touch path and return
+        if(_wcsicmp(szCommonPrefix,m_szGamePath)!=0)
         {
             return false;
         }
@@ -317,7 +316,6 @@ bool FFileManagerDeusExeDataDir::ToModernFileName(wchar_t(&szNewName)[MAX_PATH],
         }
     }
 
-    //Rebase to Documents
     if(!PathCombine(szNewName,m_szUserDataPath,szNewName)) //On failure it empties the buffer, which would then be used as the file name
     {
         return false;
@@ -328,7 +326,6 @@ bool FFileManagerDeusExeDataDir::ToModernFileName(wchar_t(&szNewName)[MAX_PATH],
         return false;
     }
 
-    //Create directory if needed
     if(op=='w' && !PathIsDirectory(pszOldName)) //PathIsDirectory needed as PathRemoveFileSpec would strip stuff like 'Save040' to just 'Save'
     {
         wchar_t* pszFileSpec = PathFindFileName(szNewName);
@@ -350,7 +347,7 @@ FArchive* FFileManagerDeusExeDataDir::CreateFileReader(const wchar_t* Filename, 
     FArchive* const pReader = FFileManagerWindows::CreateFileReader(pszResolved, Flags, Error);
     if(pReader != nullptr)
     {
-        Misc::RecordFileOpen(pszResolved);
+        CrashReport::RecordFileOpen(pszResolved);
     }
     return pReader;
 }

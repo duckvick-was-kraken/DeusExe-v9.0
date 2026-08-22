@@ -26,6 +26,31 @@ void FExecHook::NotifyDestroy( void* Src )
     }
 }
 
+bool FExecHook::HasOpenToolWindow() const
+{
+    //The window is destroyed as soon as it's closed, while NotifyDestroy only arrives once the engine gets around to
+    //deleting the object, so the handle is what says whether the window is actually still on screen.
+    return ( m_pPreferences && IsWindow( m_pPreferences->hWnd ) ) || ( m_pEditActor && IsWindow( m_pEditActor->hWnd ) );
+}
+
+UViewport* FExecHook::GetViewport() const
+{
+    TObjectIterator<UEngine> EngineIt;
+    return EngineIt && EngineIt->Client && EngineIt->Client->Viewports.Num() ? EngineIt->Client->Viewports(0) : nullptr;
+}
+
+UViewport* FExecHook::DropFullscreenForToolWindow()
+{
+    //Exclusive fullscreen can't show an overlapping tool window (DirectDraw minimizes the game on focus loss), so drop to windowed first.
+    UViewport* const Viewport = GetViewport();
+    if( Viewport && Viewport->IsFullscreen() )
+    {
+        Viewport->Exec( TEXT("ToggleFullscreen") );
+        m_bRestoreFullscreenOnToolClose = true; //Only ever latched here; the main loop clears it once the windows are closed
+    }
+    return Viewport;
+}
+
 UBOOL FExecHook::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
 {
     if( ParseCommand(&Cmd,TEXT("ShowLog")) )
@@ -80,13 +105,7 @@ UBOOL FExecHook::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
         }
         if( Found )
         {
-            //Exclusive fullscreen can't show an overlapping tool window (DirectDraw minimizes the game on focus loss), so drop to windowed first.
-            UViewport* const Viewport = EngineIt->Client && EngineIt->Client->Viewports.Num() ? EngineIt->Client->Viewports(0) : NULL;
-            if( Viewport && Viewport->IsFullscreen() )
-            {
-                Viewport->Exec( TEXT("ToggleFullscreen") );
-                m_bRestoreFullscreenOnToolClose = true; //Only ever latched here; the main loop clears it once the window closes
-            }
+            UViewport* const Viewport = DropFullscreenForToolWindow();
             if( !m_pEditActor ) //Reuse it: a second window would orphan the first and take over the tool window tracking below
             {
                 m_pEditActor = new WObjectProperties( TEXT("EditActor"), 0, TEXT(""), NULL, 1 );
@@ -95,7 +114,6 @@ UBOOL FExecHook::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
             }
             m_pEditActor->Root.SetObjects( (UObject**)&Found, 1 );
             m_pEditActor->Show(1);
-            m_hToolWindow = m_pEditActor->hWnd; //Let the main loop restore input when this window closes
         }
         else
         {
@@ -111,13 +129,16 @@ UBOOL FExecHook::Exec( const TCHAR* Cmd, FOutputDevice& Ar )
         }
         return TRUE;
     }
-    else if( ParseCommand(&Cmd,TEXT("Preferences")) && !GIsClient )
+    else if( ParseCommand(&Cmd,TEXT("Preferences")) )
     {
+        //Stock only allowed this on a dedicated server, as an overlapping window can't be shown over exclusive
+        //fullscreen; with the same drop-to-windowed treatment EditActor gets, it works in the client too.
+        UViewport* const Viewport = DropFullscreenForToolWindow();
         if( !m_pPreferences )
         {
             m_pPreferences = new WConfigProperties( TEXT("Preferences"), LocalizeGeneral("AdvancedOptionsTitle",TEXT("Window")) );
             m_pPreferences->SetNotifyHook( this );
-            m_pPreferences->OpenWindow( GLogWindow ? GLogWindow->hWnd : NULL );
+            m_pPreferences->OpenWindow( Viewport ? (HWND)Viewport->GetWindow() : GLogWindow ? GLogWindow->hWnd : NULL );
             m_pPreferences->ForceRefresh();
         }
         assert(m_pPreferences);

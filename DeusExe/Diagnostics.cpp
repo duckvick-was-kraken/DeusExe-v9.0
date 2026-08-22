@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Misc.h"
+#include "CrashReport.h"
 #include "Diagnostics.h"
 
 namespace
@@ -15,6 +16,20 @@ namespace
         case LEVACT_Precaching: return L"Precaching";
         default:                return L"Unknown";
         }
+    }
+
+    //Both entry points into the error device reach this, and either can be the first: HandleError() runs on its own
+    //when the launcher catches an unwind that no appError() started. GIsCriticalError is still zero the first time.
+    void LogFatalErrorContext()
+    {
+        if(GLog == nullptr || GIsCriticalError)
+        {
+            return;
+        }
+
+        wchar_t szContext[2048];
+        GLog->Log(NAME_Critical, PROJECTNAME L": fatal error."); //NAME_Critical so the log device flushes it; GIsCriticalError isn't set yet
+        GLog->Log(NAME_Critical, CrashReport::GetContext(szContext, _countof(szContext)));
     }
 }
 
@@ -61,25 +76,14 @@ void FOutputDeviceFileDeusExe::Serialize(const TCHAR* const Data, const EName Ev
 void FOutputDeviceErrorDeusExe::Serialize(const TCHAR* const Msg, const EName Event)
 {
     //Log what we know before the base class shuts the object system down and the context becomes unreadable
-    if(GLog != nullptr && !GIsCriticalError)
-    {
-        wchar_t szContext[2048];
-        GLog->Log(NAME_Critical, PROJECTNAME L": fatal error."); //NAME_Critical so the log device flushes it; GIsCriticalError isn't set yet
-        GLog->Log(NAME_Critical, Misc::GetCrashContext(szContext, _countof(szContext)));
-    }
+    LogFatalErrorContext();
 
     FOutputDeviceWindowsError::Serialize(Msg, Event);
 }
 
 void FOutputDeviceErrorDeusExe::HandleError()
 {
-    //Still zero when the launcher catches an unwind that no appError started, i.e. when Serialize never ran
-    if(GLog != nullptr && !GIsCriticalError)
-    {
-        wchar_t szContext[2048];
-        GLog->Log(NAME_Critical, PROJECTNAME L": fatal error.");
-        GLog->Log(NAME_Critical, Misc::GetCrashContext(szContext, _countof(szContext)));
-    }
+    LogFatalErrorContext();
 
     //The unwound engine call history is the most useful part of a crash and stock only shows it in a message box
     if(GLog != nullptr && GErrorHist[0] != 0)
@@ -88,7 +92,7 @@ void FOutputDeviceErrorDeusExe::HandleError()
         GLog->Log(NAME_Critical, GErrorHist); //Not Logf: the history can fill Core's 4096 character format buffer on its own
     }
 
-    Misc::LogCrashDetail(nullptr); //Names the objects the history couldn't, from the fault the guard chain swallowed
+    CrashReport::LogFault(nullptr); //Names the objects the history couldn't, from the fault the guard chain swallowed
 
     FOutputDeviceWindowsError::HandleError();
 }
@@ -109,7 +113,7 @@ void FFeedbackContextDeusExe::BeginSlowTask(const TCHAR* const Task, const UBOOL
     {
         GLog->Logf(PROJECTNAME L": task started: %s", Task != nullptr ? Task : L"<unnamed>");
     }
-    Misc::SetCrashPhase(Task);
+    CrashReport::SetPhase(Task);
     m_szLastStatus[0] = 0;
 
     FFeedbackContextWindows::BeginSlowTask(Task, StatusWindow, Cancelable);
@@ -121,7 +125,7 @@ void FFeedbackContextDeusExe::EndSlowTask()
     {
         GLog->Log(PROJECTNAME L": task finished.");
     }
-    Misc::SetCrashPhase(nullptr);
+    CrashReport::SetPhase(nullptr);
 
     FFeedbackContextWindows::EndSlowTask();
 }
@@ -139,7 +143,7 @@ UBOOL FFeedbackContextDeusExe::StatusUpdatef(const INT Numerator, const INT Deno
         {
             GLog->Logf(PROJECTNAME L": task progress: %s", szText);
         }
-        Misc::SetCrashPhase(szText);
+        CrashReport::SetPhase(szText);
     }
 
     return FFeedbackContextWindows::StatusUpdatef(Numerator, Denominator, L"%s", szText);
@@ -171,7 +175,7 @@ void CLevelWatcher::Update(UEngine* const pEngine)
         wcsncpy_s(m_szMap, szMap, _TRUNCATE);
         m_pLevel = pLevel;
         m_iLastChangeTicks = iNow;
-        Misc::SetCrashMap(szMap);
+        CrashReport::SetMap(szMap);
     }
 
     //Actors(0) is the level info; it's absent while a level is being built

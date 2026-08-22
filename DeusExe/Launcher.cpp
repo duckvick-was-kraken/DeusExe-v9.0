@@ -4,6 +4,7 @@
 #include "Diagnostics.h"
 #include "FileManagerDeusExe.h"
 #include "Misc.h"
+#include "CrashReport.h"
 #include "RawInput.h"
 #include "LauncherDialog.h"
 #include "FixApp.h"
@@ -21,7 +22,7 @@ extern "C" {wchar_t GPackage[64] = L"Launch"; } //Will be set to exe name later
 INT WINAPI WinMain(HINSTANCE /*hInInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR /*lpCmdLine*/, INT /*nCmdShow*/)
 {
     //Set up the crash handler first, so faults during start-up (including plugin loading) are reported with context.
-    Misc::SetupCrashHandler();
+    CrashReport::Setup();
 
     //Disable DEP before any DLLs load (needed for Galaxy.dll; also needs the exe linked /NXCOMPAT:NO). Logged after appInit, once GLog exists.
     const bool bDEPDisabled = Misc::SetDEP(0);
@@ -86,7 +87,6 @@ INT WINAPI WinMain(HINSTANCE /*hInInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR
 
     Plugins.Dispatch(DeusExePluginEvent_Shutdown); //While the DLLs are still loaded; the manager frees them when it goes out of scope
 
-    //Uninit
     if (!GIsCriticalError)
     {
         appPreExit();
@@ -118,7 +118,6 @@ CLauncher::CLauncher(CPluginManager& Plugins)
         GConfig->SetString(L"WinDrv.WindowsClient", L"FullscreenViewportY", szTemp);
     }
 
-    //Show options dialog
     if (ParseParam(appCmdLine(), L"changevideo") || bFirstRun)
     {
         CFixApp FixApp;
@@ -129,7 +128,6 @@ CLauncher::CLauncher(CPluginManager& Plugins)
         }
     }
 
-    //Show launcher dialog
     HMONITOR hMonitor = NULL;
 
     const auto DoLauncherDialog = [&hMonitor]
@@ -148,28 +146,23 @@ CLauncher::CLauncher(CPluginManager& Plugins)
 
         if (m_bUseSingleCPU)
         {
-            if (SetProcessAffinityMask(GetCurrentProcess(), 0x1) == FALSE) //Force on single CPU
+            if (SetProcessAffinityMask(GetCurrentProcess(), 0x1) == FALSE)
             {
                 GLog->Log(L"Failed to set process affinity.");
             }
         }
 
-        if (m_bRawInput) //If raw input is enabled, disable DirectInput
-        {
-            GConfig->SetBool(L"WinDrv.WindowsClient", L"UseDirectInput", FALSE);
-        }
+        GConfig->SetBool(L"WinDrv.WindowsClient", L"UseDirectInput", m_bRawInput ? FALSE : TRUE);
 
-        if (m_bBorderlessFullscreenWindow) //In borderless mode, disable normal full screen
+        if (m_bBorderlessFullscreenWindow)
         {
             GConfig->SetBool(L"WinDrv.WindowsClient", L"StartupFullscreen", FALSE);
         }
 
-        //Init windowing
         InitWindowing();
 
-        //Create log window
         const std::unique_ptr<WLog> LogWindowPtr = std::make_unique<WLog>(static_cast<FOutputDeviceFile*>(GLog)->Filename, static_cast<FOutputDeviceFile*>(GLog)->LogAr, L"GameLog");
-        GLogWindow = LogWindowPtr.get(); //Yup...
+        GLogWindow = LogWindowPtr.get();
         GLogWindow->OpenWindow(!GIsClient, 0);
         GLogWindow->Log(NAME_Title, LocalizeGeneral("Start"));
 
@@ -179,7 +172,6 @@ CLauncher::CLauncher(CPluginManager& Plugins)
         GIsGuarded = 1;
         try
         {
-            //Init engine
             UClass* const pEngineClass = LoadClass<UGameEngine>(nullptr, L"ini:Engine.Engine.GameEngine", nullptr, LOAD_NoFail, nullptr);
             assert(pEngineClass);
             UEngine* const pEngine = ConstructObject<UEngine>(pEngineClass);
@@ -196,7 +188,6 @@ CLauncher::CLauncher(CPluginManager& Plugins)
             GLogWindow->SetExec(pEngine); //If we directly set GExec, only our custom commands work
             GLogWindow->Log(NAME_Title, LocalizeGeneral("Run"));
 
-            //Find window handle
             if (GIsClient)
             {
                 if (pEngine->Client && pEngine->Client->Viewports.Num() > 0)
@@ -212,7 +203,7 @@ CLauncher::CLauncher(CPluginManager& Plugins)
 
             Plugins.Dispatch(DeusExePluginEvent_ViewportCreated, pEngine, m_pViewPort, m_hWnd);
 
-            //Move window to launcher's monitor
+            //Follow the launcher dialog onto whichever monitor it was closed on
             if (hMonitor != NULL && m_hWnd)
             {
                 Misc::CenterWindowOnMonitor(m_hWnd, hMonitor);
@@ -223,7 +214,6 @@ CLauncher::CLauncher(CPluginManager& Plugins)
                 ToggleBorderlessWindowedFullscreen();
             }
 
-            //Initialize raw input
             if (m_bRawInput && m_hWnd)
             {
                 if (!RegisterRawInput(m_hWnd))
@@ -240,10 +230,8 @@ CLauncher::CLauncher(CPluginManager& Plugins)
                 ApplyAutoFOV(static_cast<size_t>(m_pViewPort->SizeX), static_cast<size_t>(m_pViewPort->SizeY));
             }
 
-            //Initialize native hooks
             CNativeHooks NativeHooks(PROJECTNAME);
 
-            //Main loop
             GIsRunning = 1;
             if (!GIsRequestingExit)
             {
@@ -301,6 +289,67 @@ namespace
         };
         return static_cast<RootHack&>(Root).GetScale();
     }
+
+    /**
+    Paces the main loop, and owns whatever it had to set up to do so, so an engine exception unwinding out of the
+    loop can't leave the process behind with the system timer resolution still raised.
+
+    Sleep() is the only wait with a usable resolution available across the supported Windows versions, and even at a
+    1ms timer period it overshoots, so the last few milliseconds of a frame are spun out instead of slept away.
+    */
+    class CFrameLimiter
+    {
+    public:
+        CFrameLimiter()
+        {
+            //Gives Sleep() ~1ms granularity instead of the scheduler's default ~15.6ms, which is far too coarse to pace a frame with
+            m_bTimerPeriodSet = timeBeginPeriod(sm_uTimerPeriodMs) == TIMERR_NOERROR;
+        }
+
+        ~CFrameLimiter()
+        {
+            if(m_bTimerPeriodSet)
+            {
+                timeEndPeriod(sm_uTimerPeriodMs);
+            }
+        }
+
+        CFrameLimiter(const CFrameLimiter&) = delete;
+        CFrameLimiter& operator=(const CFrameLimiter&) = delete;
+
+        //Waits until the performance counter reaches iDeadlineTicks, yielding the CPU for all but the final approach
+        void WaitUntil(const LONGLONG iDeadlineTicks, const LONGLONG iFrequency) const
+        {
+            //Spun rather than slept, so the loop doesn't oversleep the deadline: Sleep(1) can return several
+            //milliseconds late, and how late depends on whether raising the timer period above was allowed at all.
+            const LONGLONG iSpinTicks = iFrequency * 6 / 1000; //~6ms worth of counter ticks
+
+            for(;;)
+            {
+                LARGE_INTEGER iNow;
+                QueryPerformanceCounter(&iNow);
+                const LONGLONG iRemaining = iDeadlineTicks - iNow.QuadPart;
+                if(iRemaining <= 0)
+                {
+                    return;
+                }
+
+                if(iRemaining > iSpinTicks) //More than ~6ms to go: yield instead of busy-spinning
+                {
+                    Sleep(1);
+                }
+                else
+                {
+                    YieldProcessor(); //Hint to the CPU that this is a spin-wait, so the core isn't hammered
+                }
+            }
+        }
+
+    private:
+        static const UINT sm_uTimerPeriodMs = 1;
+
+        bool m_bTimerPeriodSet = false;
+    };
 }
 
 void CLauncher::MainLoop(UEngine* const pEngine)
@@ -319,7 +368,7 @@ void CLauncher::MainLoop(UEngine* const pEngine)
         return;
     }
 
-    timeBeginPeriod(1); //Give Sleep() ~1ms granularity so the frame limiter can yield the CPU without overshooting
+    const CFrameLimiter FrameLimiter; //Owns the timer resources; a destructor, so an engine exception can't leak them
 
     LARGE_INTEGER iSecondStart = iOldTime;
     int iTickCount = 0;
@@ -329,7 +378,12 @@ void CLauncher::MainLoop(UEngine* const pEngine)
     {
         LARGE_INTEGER iTime;
         QueryPerformanceCounter(&iTime);
-        const float fDeltaTime = (iTime.QuadPart - iOldTime.QuadPart) / static_cast<float>(m_iPerfCounterFreq.QuadPart);
+
+        //Clamped: a stall (a level load, a debugger break, a resume from sleep) would otherwise hand the actors
+        //seconds of movement in a single tick, which sends them through walls. Better to briefly run slow instead.
+        constexpr float fMaxDeltaTime = 0.2f;
+        float fDeltaTime = (iTime.QuadPart - iOldTime.QuadPart) / static_cast<float>(m_iPerfCounterFreq.QuadPart);
+        fDeltaTime = std::min(std::max(fDeltaTime, 0.0f), fMaxDeltaTime); //Also covers a counter that jumped backwards
         iOldTime = iTime;
 
         //Tick (and render) every iteration with the real elapsed time, like the stock UnEngineWin.h loop; the frame rate is capped by sleeping at the bottom of the loop.
@@ -419,49 +473,21 @@ void CLauncher::MainLoop(UEngine* const pEngine)
 
             //PeekMessage() doesn't get WM_SIZE
             //Default/desired FOV check is so we don't change FOV while zoomed in
-            if (m_bAutoFov && pPlayer && pPlayer->DesiredFOV == pPlayer->DefaultFOV)
+            //A mode change can briefly report an empty viewport; calculating an FOV for it would divide by zero
+            if (m_bAutoFov && pPlayer && pPlayer->DesiredFOV == pPlayer->DefaultFOV && m_pViewPort->SizeX > 0 && m_pViewPort->SizeY > 0)
             {
                 const size_t iSizeX = static_cast<size_t>(m_pViewPort->SizeX);
                 const size_t iSizeY = static_cast<size_t>(m_pViewPort->SizeY);
 
-                //Handle auto FOV
                 if(m_iSizeX != iSizeX  || m_iSizeY != iSizeY)
                 {
                     ApplyAutoFOV(iSizeX, iSizeY);
                 }
             }
             
-            //pEngine->Client->Viewports(0)->SetMouseCapture()'s cursor centering doesn't work with raw input.
-            //Why doesn't it work? Because we block WM_MOUSEMOVE messages, which the game apparently uses to center the cursor.
-            //SetCursorPos() still works, though, which I'd assume the game uses; ClipCursor() didn't exist until Win2000.
-            //Also, if you force the game to turn off mouse centering, the camera doesn't work; does it use the WM_MOUSEMOVE messages generated by SetCursorPos() to actually move the camera?
-
-            //Issue: using raw input, in full-screen mode you can move the cursor around while controlling the camera, if you then open the menu and slightly move the mouse
-            //The game's cursor will snap to the Windows mouse cursor position.
-            //Theory as to why: SetMouseCapture() without clipping resets the mouse position to previous (looking at headers / UT X driver code).
-            //In full-screen mode this is not done when going to the menu (observed in Windows Input mode, cursor keeps being centered).
-            //Because the game uses relative messages for menu mouse input (MouseDelta(), not MousePosition()) this doesn't matter.
-
-            //Other observed behavior in Windows Input mode, running windowed: mouse is clipped to window dimensions + centered in menu mode (like in camera mode)
-            //Until alt+tab or mission start, at which point it's not clipped and window can be resized
-
-            //Forcing mouse to be centered in menu mode makes it feel weird, doesn't match Windows mouse cursor movements
-
-            /* Tests
-            1. Does menu cursor track Windows cursor nicely
-            2. Can cursor immediately leave window when menu first pops up (who cares)
-            3. Does resize cursor pop up on window edges
-            4. When alt+tabbing while not in a menu, make sure mouse isn't clipped to game window area
-            5. Both windowed and full screen: when having controlled the camera and then entering a menu, the mouse should either be centered or in the position where it last was.
-               When touching the mouse, it should not teleport due to having been moved in camera mode.
-            5a. Still happens in raw input + windowed mode when entering menu without having first moved mouse, acceptable.
-            6. When alt+tabbing and not in a menu, make sure camera isn't controlled by mouse movements until the window is clicked
-            7. Make sure Windows mouse cursor is not visible (other than during testing)
-            8. Make sure preferences window is usable (no hidden cursor) and that it doesn't pop up a phantom cursor in menu mode
-            9. When looking around with preferences window on top, cursor doesn't appear
-            10. In fullscreen mode, when rapidly clicking, window isn't minimized
-            11. In two-monitor fullscreen make sure mouse can't move outside of monitor
-            */
+            //Raw input means WM_MOUSEMOVE is swallowed below, so the engine's own cursor centering
+            //(SetMouseCapture) never happens; the menu cursor is driven with SetCursorPos()/ClipCursor() here
+            //instead. Menu input itself uses relative deltas (MouseDelta, not MousePosition), so it doesn't care.
 
             const bool bInMenu = pRoot && pRoot->IsMouseGrabbed() != 0;
 
@@ -528,8 +554,7 @@ void CLauncher::MainLoop(UEngine* const pEngine)
 
             const bool bMouseInClientRect = bHaveCursorPos && PtInRect(&rClientScreen, CursorPos)!=0; //This makes sure resize cursor isn't hidden
             const bool bCaptured = GetCapture() == m_hWnd;
-            //Only hide the cursor while the game owns focus, else it vanishes over the game area behind a focused tool window.
-            //Want to show cursor when over preferences window when we don't have focus, but not when it's under the window if we do
+            //Only hide the cursor while the game owns focus, else it vanishes over the game area behind a focused tool window
             SetCursorHidden(bHasFocus && bMouseInClientRect && (bMouseOverWindow || bCaptured));
         }
 
@@ -549,7 +574,6 @@ void CLauncher::MainLoop(UEngine* const pEngine)
                 {
                     if (bMouseOverWindow) //Because preferences window defers mousemove calls to us, somehow
                     {
-                        //Use WM_MOUSEMOVE to control menu cursor
                         const int iXPos = GET_X_LPARAM(Msg.lParam);
                         const int iYPos = GET_Y_LPARAM(Msg.lParam);
                         pEngine->MousePosition(m_pViewPort, 0, static_cast<float>(iXPos), static_cast<float>(iYPos));
@@ -581,7 +605,6 @@ void CLauncher::MainLoop(UEngine* const pEngine)
 
             case WM_INPUT:
             {
-                //Use raw input to control camera
                 if (m_pViewPort && bHasFocus)
                 {
                     RAWINPUT raw;
@@ -603,22 +626,22 @@ void CLauncher::MainLoop(UEngine* const pEngine)
                         pEngine->InputEvent(m_pViewPort, EInputKey::IK_MouseY, EInputAction::IST_Axis, -fDeltaY);
                     }
 
+                    if (raw.data.mouse.ulButtons & RI_MOUSE_BUTTON_4_DOWN)
+                    {
+                        pEngine->InputEvent(m_pViewPort, EInputKey::IK_Unknown05, EInputAction::IST_Press);
+                    }
                     if (raw.data.mouse.ulButtons & RI_MOUSE_BUTTON_4_UP)
                     {
                         pEngine->InputEvent(m_pViewPort, EInputKey::IK_Unknown05, EInputAction::IST_Release);
                     }
-                    else if (raw.data.mouse.ulButtons & RI_MOUSE_BUTTON_4_DOWN)
-                    {
-                        pEngine->InputEvent(m_pViewPort, EInputKey::IK_Unknown05, EInputAction::IST_Press);
-                    }
 
+                    if (raw.data.mouse.ulButtons & RI_MOUSE_BUTTON_5_DOWN)
+                    {
+                        pEngine->InputEvent(m_pViewPort, EInputKey::IK_Unknown06, EInputAction::IST_Press);
+                    }
                     if (raw.data.mouse.ulButtons & RI_MOUSE_BUTTON_5_UP)
                     {
                         pEngine->InputEvent(m_pViewPort, EInputKey::IK_Unknown06, EInputAction::IST_Release);
-                    }
-                    else if (raw.data.mouse.ulButtons & RI_MOUSE_BUTTON_5_DOWN)
-                    {
-                        pEngine->InputEvent(m_pViewPort, EInputKey::IK_Unknown06, EInputAction::IST_Press);
                     }
 
                     bSkipMessage = true;
@@ -642,25 +665,28 @@ void CLauncher::MainLoop(UEngine* const pEngine)
             m_bViewportSubclassed = false; //Went away with the window (our subclass proc drops it on WM_NCDESTROY)
         }
 
-        //When the EditActor window closes, re-enter the fullscreen we dropped for it: that forces WinDrv's full input
-        //re-init, the only thing that reliably restores keyboard/mouse routing after it stole focus mid-switch.
-        if(m_hToolWindow != NULL && !IsWindow(m_hToolWindow))
+        //When the last property window closes, re-enter the fullscreen we dropped for it: that forces WinDrv's full
+        //input re-init, the only thing that reliably restores keyboard/mouse routing after it stole focus mid-switch.
+        const bool bToolWindowOpen = HasOpenToolWindow();
+        if(m_bPrevToolWindowOpen && !bToolWindowOpen && m_hWnd != NULL)
         {
-            m_hToolWindow = NULL;
-            if(m_hWnd != NULL)
+            SetForegroundWindow(m_hWnd);
+        }
+        m_bPrevToolWindowOpen = bToolWindowOpen;
+
+        //Not tied to the frame the window closed on: a mode change can leave the viewport briefly absent, and losing
+        //the switch to that would strand the game in windowed mode for the rest of the session.
+        if(!bToolWindowOpen && m_bRestoreFullscreenOnToolClose && m_hWnd != NULL && m_pViewPort)
+        {
+            if(!m_pViewPort->IsFullscreen()) //The user can have gone back to fullscreen themselves in the meantime
             {
-                SetForegroundWindow(m_hWnd);
-                if(m_bRestoreFullscreenOnToolClose && m_pViewPort && !m_pViewPort->IsFullscreen())
-                {
-                    m_pViewPort->Exec(TEXT("ToggleFullscreen"));
-                }
+                m_pViewPort->Exec(TEXT("ToggleFullscreen"));
             }
             m_bRestoreFullscreenOnToolClose = false;
         }
 
-        //Cap the frame rate by sleeping away the rest of the frame's period. Cap = min(user FPSLimit, engine
-        //GetMaxTickRate()); 0 = unlimited. Sleep(1) while >~6ms remain (timeBeginPeriod gives ~1ms granularity), then
-        //spin for the final approach. Paced from the frame start (iTime) so the next delta lands on one period, no drift.
+        //Cap the frame rate by waiting out the rest of the frame's period. Cap = min(user FPSLimit, engine
+        //GetMaxTickRate()); 0 = unlimited. Paced from the frame start (iTime) so the next delta lands on one period, no drift.
         if(!GIsRequestingExit)
         {
             const float fEngineMaxTickRate = pEngine->GetMaxTickRate();
@@ -672,30 +698,11 @@ void CLauncher::MainLoop(UEngine* const pEngine)
             if(fMaxFPS > 0.0f)
             {
                 const LONGLONG iPeriodTicks = static_cast<LONGLONG>(m_iPerfCounterFreq.QuadPart / fMaxFPS);
-                const LONGLONG iSpinTicks = m_iPerfCounterFreq.QuadPart * 6 / 1000; //~6ms worth of counter ticks
-                for(;;)
-                {
-                    LARGE_INTEGER iNow;
-                    QueryPerformanceCounter(&iNow);
-                    const LONGLONG iRemaining = iPeriodTicks - (iNow.QuadPart - iTime.QuadPart);
-                    if(iRemaining <= 0)
-                    {
-                        break;
-                    }
-                    if(iRemaining > iSpinTicks) //More than ~6ms to go: yield instead of busy-spinning
-                    {
-                        Sleep(1);
-                    }
-                    else
-                    {
-                        YieldProcessor(); //Hint to the CPU that this is a spin-wait, so the core isn't hammered
-                    }
-                }
+                FrameLimiter.WaitUntil(iTime.QuadPart + iPeriodTicks, m_iPerfCounterFreq.QuadPart);
             }
         }
     }
 
-    timeEndPeriod(1);
     ReleaseCursor();
 }
 
@@ -737,6 +744,13 @@ void CLauncher::LoadSettings()
     GConfig->GetBool(PROJECTNAME, L"BorderlessFullscreenWindow", m_bBorderlessFullscreenWindow);
     GConfig->GetBool(PROJECTNAME, L"BorderlessFullscreenWindowAllMonitors", m_bBorderlessFullscreenWindowUseAllMonitors);
     GConfig->GetBool(PROJECTNAME, L"UseSingleCPU", m_bUseSingleCPU);
+
+    //Galaxy defaults DirectSound to on when the ini has no entry, so write an explicit 'off' instead
+    UBOOL bUseDirectSound = FALSE;
+    if(!GConfig->GetBool(L"Galaxy.GalaxyAudioSubsystem", L"UseDirectSound", bUseDirectSound))
+    {
+        GConfig->SetBool(L"Galaxy.GalaxyAudioSubsystem", L"UseDirectSound", FALSE);
+    }
 }
 
 void CLauncher::ToggleBorderlessWindowedFullscreen()

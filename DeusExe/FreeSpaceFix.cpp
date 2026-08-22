@@ -2,6 +2,7 @@
 #include "FreeSpaceFix.h"
 #include "FileManagerDeusExe.h"
 #include "Misc.h"
+#include "CrashReport.h"
 
 CFreeSpaceFix::CFreeSpaceFix()
 :CFixBaseT(L"Free save space fix")
@@ -24,7 +25,7 @@ void CFreeSpaceFix::ReplacementFunc(UObject& UObjectThis, CFreeSpaceFix& /*FixOb
         wchar_t szContext[1024];
         GLog->Logf(L"FreeSpaceFix: GetDiskFreeSpaceEx failed for '%s' (error %u); reporting 0 free bytes for %s.",
             szSaveDirNew, GetLastError(),
-            Misc::FormatScriptContext(szContext, _countof(szContext), &UObjectThis, Stack.Node));
+            CrashReport::FormatScriptContext(szContext, _countof(szContext), &UObjectThis, Stack.Node));
         GetDiskFreeSpaceEx(nullptr, &BytesAvailable, nullptr, nullptr); //Fall back to the current directory's volume
     }
 

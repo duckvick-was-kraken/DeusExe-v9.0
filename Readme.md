@@ -89,6 +89,7 @@ The entry point is called once per event, with a context holding the command lin
 - The 'Data Directories' dialog now recognizes localization files regardless of how the extension is capitalized, so a '.INT' entry is no longer treated as a package directory.
 - The game log is a lot more useful when something goes wrong. Level changes, queued travel and the engine's loading progress are logged, and a crash report now names the module and offset that faulted, what the faulting instruction was doing, and which map and loading stage the game was in. The engine's own call history, previously only shown in a message box, ends up in the log as well.
 - Added an 'Enable verbose logging' option to the configuration dialog. It timestamps every log line and writes it to disk as it happens, so the lines leading up to a crash are no longer lost in a buffer, and it records the object and script function behind the last hooked native call for the crash report. It is off by default, as logging this way costs performance.
+- Fixed raw mouse setting not being saved properly to the ini.
 - Switched to Visual Studio 2022, make sure to [update your runtimes](https://aka.ms/vs/17/release/vc_redist.x86.exe).
 
 ### Version 8.1 (februari 20, 2016)

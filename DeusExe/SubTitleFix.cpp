@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "SubTitleFix.h"
 #include "Misc.h"
+#include "CrashReport.h"
 
 const wchar_t* const CSubtitleFix::sm_pszConfigString = L"SubtitleFix";
 
@@ -29,7 +30,7 @@ void CSubtitleFix::ReplacementFunc(XWindow& XWinThis, CSubtitleFix& /*Context*/,
         {
             wchar_t szContext[1024];
             GLog->Logf(L"SubtitleFix: replacement class 'DeusExe.ConWindowActive2' not found; keeping original for %s.",
-                Misc::FormatScriptContext(szContext, _countof(szContext), &XWinThis, Stack.Node));
+                CrashReport::FormatScriptContext(szContext, _countof(szContext), &XWinThis, Stack.Node));
         }
     }
 

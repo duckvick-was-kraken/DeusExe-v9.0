@@ -15,9 +15,18 @@ private:
 
 //From FExec
 protected:
-    HWND m_hToolWindow = NULL; //EditActor property window; CLauncher watches it to restore input when it closes
-    bool m_bRestoreFullscreenOnToolClose = false; //We dropped exclusive fullscreen to show the tool window; return to it on close
+    /**
+    True while one of the property windows we dropped exclusive fullscreen for is still up. Both of them are tracked,
+    so closing one while the other is open doesn't restore fullscreen out from under the one that's left.
+    */
+    bool HasOpenToolWindow() const;
+
+    bool m_bRestoreFullscreenOnToolClose = false; //We dropped exclusive fullscreen to show a tool window; return to it once they're all closed
     UBOOL Exec( const TCHAR* Cmd, FOutputDevice& Ar ) override;
+
+private:
+    UViewport* GetViewport() const; //!< The first viewport, or null on a dedicated server or before one exists
+    UViewport* DropFullscreenForToolWindow(); //!< Leaves exclusive fullscreen so an overlapping tool window can be shown; returns the viewport
 
 //From FNotifyHook
 private:

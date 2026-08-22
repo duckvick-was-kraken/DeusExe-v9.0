@@ -91,6 +91,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ConfigCacheDeusExe.cpp" />
+    <ClCompile Include="CrashReport.cpp" />
     <ClCompile Include="Diagnostics.cpp" />
     <ClCompile Include="FileManagerDeusExe.cpp" />
     <ClCompile Include="ExecHook.cpp" />
@@ -127,6 +128,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ConfigCacheDeusExe.h" />
+    <ClInclude Include="CrashReport.h" />
     <ClInclude Include="DataDirDialog.h" />
     <ClInclude Include="Diagnostics.h" />
     <ClInclude Include="ExecHook.h" />

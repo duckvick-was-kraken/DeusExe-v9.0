@@ -244,7 +244,7 @@ void CFancyTreeView::SwapItems(const HTREEITEM hItem1, const HTREEITEM hItem2)
 {
     assert(hItem1);
     assert(hItem2);
-    //Swap the items' SortKey members and then re-sort the list using those
+    //Swap the items' sort keys, then re-sort by those
     CTreeItem* const pItem1 = TreeItemFromHandle(hItem1);
     CTreeItem* const pItem2 = TreeItemFromHandle(hItem2);
     if(!pItem1 || !pItem2)
@@ -256,7 +256,6 @@ void CFancyTreeView::SwapItems(const HTREEITEM hItem1, const HTREEITEM hItem2)
     TVSORTCB SortCB = {}; //Zeroed: lParam is passed on to the compare function, so it can't be left indeterminate
     SortCB.hParent = TVI_ROOT;
 
-    // Compare function so we can sort items by their SortKey members
     SortCB.lpfnCompare = [](const LPARAM lParam1, const LPARAM lParam2, const LPARAM /*lParamSort*/)
     {
         const CTreeItem* const pItem1 = reinterpret_cast<CTreeItem*>(lParam1);
@@ -381,8 +380,6 @@ BOOL CFancyTreeView::HandleNotify(const NMHDR* const pNMH)
     assert(pNMH);
     switch(pNMH->code)
     {
-    //Checkbox changes are handled in TreeSubclassProc, not via TVN_ITEMCHANGING/CHANGED (WINE never sends those for checkbox changes).
-
     case TVN_SELCHANGING:
     {
         const NMTREEVIEW * const pItemInfo = reinterpret_cast<const NMTREEVIEW*>(pNMH);

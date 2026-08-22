@@ -32,6 +32,7 @@ private:
     bool m_bInBorderlessFullscreenWindow = false;
     bool m_bCursorClipped = false;
     bool m_bViewportSubclassed = false;
+    bool m_bPrevToolWindowOpen = false; //!< A property window was open last frame; fullscreen is restored on the closing edge
 
     //Settings
     float m_fFPSLimit = 120.0f; //Because GetMaxTickRate() is float

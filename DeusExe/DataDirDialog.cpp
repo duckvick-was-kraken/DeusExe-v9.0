@@ -42,7 +42,6 @@ void CDataDirDialog::ProcessDirFiles(const wchar_t* const pszDir, const wchar_t*
             {
                 if(!(FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
                 {
-                    //Add extension
                     wcsncpy_s(pszRelFileName, iCharsLeft, pszExt, _TRUNCATE);
                     AddItemToList(szRelativePath);
                     break;
@@ -52,6 +51,28 @@ void CDataDirDialog::ProcessDirFiles(const wchar_t* const pszDir, const wchar_t*
             FindClose(hDir);
         }
     }
+}
+
+bool CDataDirDialog::GetDirIdentity(const wchar_t* const pszDir, SDirIdentity& Identity)
+{
+    assert(pszDir);
+
+    //FILE_FLAG_BACKUP_SEMANTICS is needed to open a directory. Reparse points are followed, so a symlink or junction identifies its target.
+    const HANDLE hDir = CreateFile(pszDir, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if(hDir == INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+
+    BY_HANDLE_FILE_INFORMATION FileInfo;
+    const bool bSucceeded = GetFileInformationByHandle(hDir, &FileInfo) != FALSE;
+    CloseHandle(hDir);
+
+    if(bSucceeded)
+    {
+        Identity = { FileInfo.dwVolumeSerialNumber, FileInfo.nFileIndexHigh, FileInfo.nFileIndexLow };
+    }
+    return bSucceeded;
 }
 
 void CDataDirDialog::SearchDirs(const wchar_t* const pszTargetDir, const wchar_t* const pszRootDir, const size_t iDepth)
@@ -64,22 +85,34 @@ void CDataDirDialog::SearchDirs(const wchar_t* const pszTargetDir, const wchar_t
         return;
     }
 
-    //Build search string
     wchar_t szTargetPath[MAX_PATH];
     if(!PathCombine(szTargetPath, pszTargetDir, L"*."))
     {
         return;
     }
+
+    //Symlinks and junctions are followed, so stop when one leads back into a directory we're already inside: that would recurse forever.
+    //Filesystems that don't report a usable identity aren't tracked; the depth limit still bounds the search.
+    SDirIdentity Identity;
+    const bool bTrackIdentity = GetDirIdentity(pszTargetDir, Identity);
+    if(bTrackIdentity)
+    {
+        if(std::find(m_AncestorDirs.cbegin(), m_AncestorDirs.cend(), Identity) != m_AncestorDirs.cend())
+        {
+            return;
+        }
+        m_AncestorDirs.push_back(Identity);
+    }
+
     WIN32_FIND_DATA FindData;
     const HANDLE hDir = FindFirstFile(szTargetPath, &FindData);
 
-    //Find subdirectories
     if(hDir != INVALID_HANDLE_VALUE)
     {
         do
         {
-            //Reparse points are skipped: a junction pointing at an ancestor would recurse forever
-            if((FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(FindData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && wcscmp(FindData.cFileName, L"..") != 0 && wcscmp(FindData.cFileName, L".") != 0)
+            //Symlinked and junctioned directories are included: users link data directories in from elsewhere. Loops are handled by the identity check above.
+            if((FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && wcscmp(FindData.cFileName, L"..") != 0 && wcscmp(FindData.cFileName, L".") != 0)
             {
                 wchar_t szChildPath[MAX_PATH];
                 if(!PathCombine(szChildPath, pszTargetDir, FindData.cFileName))
@@ -87,7 +120,6 @@ void CDataDirDialog::SearchDirs(const wchar_t* const pszTargetDir, const wchar_t
                     continue;
                 }
 
-                //Convert to relative path
                 wchar_t szRelativePath[MAX_PATH];
                 if(!PathRelativePathTo(szRelativePath, pszRootDir, FILE_ATTRIBUTE_DIRECTORY, szChildPath, FILE_ATTRIBUTE_DIRECTORY)) //Leaves the buffer undefined on failure
                 {
@@ -99,7 +131,7 @@ void CDataDirDialog::SearchDirs(const wchar_t* const pszTargetDir, const wchar_t
                 {
                     continue;
                 }
-                //Check if directory is one of the standard ones, if so don't process it any further
+                //Standard directories aren't the user's to change, so don't process them any further
                 if(m_DefaultDataDirs.find(szRelativePath) != m_DefaultDataDirs.cend())
                 {
                     continue;
@@ -115,12 +147,15 @@ void CDataDirDialog::SearchDirs(const wchar_t* const pszTargetDir, const wchar_t
 
         FindClose(hDir);
     }
+
+    if(bTrackIdentity)
+    {
+        m_AncestorDirs.pop_back();
+    }
 }
 
 void CDataDirDialog::FindDefaultItems()
 {
-    //Store directories from default.ini in map so we ignore then
-
     TMultiMap<FString, FString>* const pSection = GConfig->GetSectionPrivate(L"Core.System", FALSE, TRUE, L"default.ini");
     if(pSection) //Absent in an install without a default.ini
     {
@@ -157,7 +192,6 @@ void CDataDirDialog::AddItemsFromConfig()
         }
     };
 
-    //Find current items
     assert(GSys);
     for(int i = 0; i < GSys->Paths.Num(); i++)
     {
@@ -212,7 +246,6 @@ void CDataDirDialog::PopulateConfig() const
     TMultiMap<FString, FString>* const pSectionInt = GConfig->GetSectionPrivate(PROJECTNAME, TRUE, FALSE); //Int files have their own section as we use our own override mechanism
     assert(pSectionInt);
 
-    //Clear list
     pSection->Remove(sm_pszPaths);
     pSectionInt->Remove(FFileManagerDeusExe::sm_pszIntPaths);
 

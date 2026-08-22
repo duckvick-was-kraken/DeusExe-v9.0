@@ -42,7 +42,6 @@ void CGUIScalingFix::ReplacementFunc(const APlayerPawnExt& PlayerPawnThis, CGUIS
                 hMultiplier = Context.m_iScaleAmount;
                 vMultiplier = Context.m_iScaleAmount;
 
-                //Apply changes
                 for (XWindow *pChild = GetBottomChild(); pChild != nullptr; pChild = pChild->GetHigherSibling())
                 {
                     pChild->Hide();
