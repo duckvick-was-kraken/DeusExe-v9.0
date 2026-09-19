@@ -268,7 +268,7 @@ void FFileManagerDeusExeDataDir::AfterCoreInit()
     GLog->Logf(L"Deus Exe: Using data directory '%s'.", m_szDataDir);
     if(!m_bHaveGamePath)
     {
-        GLog->Log(L"Deus Exe: Could not determine the game directory; absolute paths will not be redirected.");
+        GLog->Log(L"Deus Exe: No game directory; absolute paths are not redirected.");
     }
     FFileManagerDeusExe::AfterCoreInit();
 }

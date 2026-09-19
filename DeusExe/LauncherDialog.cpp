@@ -6,6 +6,47 @@
 #include "FileManagerDeusExe.h"
 #include "resource.h"
 
+namespace
+{
+    /**
+    Resolves the directory that holds the configuration data and save games, honouring -localdata and -gamename.
+    GetDataDir() reports that no redirection is in effect at all (plain -localdata, or no usable 'Documents'), in which
+    case that data lives in the install itself, one level up from 'System'.
+    */
+    bool GetDataDirToOpen(wchar_t(&szFolder)[MAX_PATH])
+    {
+        if(Misc::GetDataDir(szFolder))
+        {
+            return true;
+        }
+
+        wchar_t szSystemDir[MAX_PATH];
+        return Misc::GetGameSystemDir(szSystemDir) && PathCombine(szFolder, szSystemDir, L"..") != nullptr;
+    }
+
+    void RightAlignLinks(const HWND hWndDlg)
+    {
+        assert(hWndDlg);
+
+        static const int s_iLinkIDs[] = { IDC_SAVEFOLDER, IDC_INIFILES1, IDC_INIFILES2 };
+
+        for(const int iLinkID : s_iLinkIDs)
+        {
+            const HWND hWndLink = GetDlgItem(hWndDlg, iLinkID);
+            RECT rLink;
+            if(GetWindowRect(hWndLink, &rLink) == FALSE)
+            {
+                continue;
+            }
+            MapWindowPoints(NULL, hWndDlg, reinterpret_cast<POINT*>(&rLink), 2);
+
+            SIZE Ideal = { rLink.right - rLink.left, 0 };
+            SendMessage(hWndLink, LM_GETIDEALSIZE, static_cast<WPARAM>(rLink.right), reinterpret_cast<LPARAM>(&Ideal));
+            MoveWindow(hWndLink, rLink.right - Ideal.cx, rLink.top, Ideal.cx, rLink.bottom - rLink.top, TRUE);
+        }
+    }
+}
+
 bool CLauncherDialog::Show(const HWND hWndParent)
 {
     return DialogBoxParam(GetModuleHandle(0),MAKEINTRESOURCE(IDD_DIALOG1),hWndParent,LauncherDialogProc,reinterpret_cast<LPARAM>(this)) == 1;
@@ -36,6 +77,7 @@ INT_PTR CALLBACK CLauncherDialog::LauncherDialogProc(HWND hwndDlg,UINT uMsg,WPAR
             SendMessage(hwndDlg, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(LoadIcon(reinterpret_cast<HINSTANCE>(GetWindowLongPtr(hwndDlg,GWLP_HINSTANCE)), MAKEINTRESOURCE(IDI_ICON))));
 
             pThis->m_hWndWebsite = GetDlgItem(hwndDlg, IDC_WEBSITE);
+            pThis->m_hWndSaveFolder = GetDlgItem(hwndDlg, IDC_SAVEFOLDER);
 
             wchar_t szVersion[64];
             _snwprintf_s(szVersion, _TRUNCATE, L"Version %s", Misc::GetVersion());
@@ -50,6 +92,8 @@ INT_PTR CALLBACK CLauncherDialog::LauncherDialogProc(HWND hwndDlg,UINT uMsg,WPAR
 
             pThis->FillLinkControl(pThis->m_hWndIniFile1, *pCI->SystemIni);
             pThis->FillLinkControl(pThis->m_hWndIniFile2, *pCI->UserIni);
+
+            RightAlignLinks(hwndDlg);
         }
 
         return TRUE;
@@ -92,6 +136,22 @@ INT_PTR CALLBACK CLauncherDialog::LauncherDialogProc(HWND hwndDlg,UINT uMsg,WPAR
         {
         case NM_CLICK:
         {
+            if(pThis && pNMH->hwndFrom == pThis->m_hWndSaveFolder)
+            {
+                GConfig->Flush(FALSE); //Writes out the current settings, which is also what creates the directory on a first run
+
+                wchar_t szFolder[MAX_PATH];
+                if(!GetDataDirToOpen(szFolder))
+                {
+                    GLog->Log(L"Deus Exe: Could not determine the save folder.");
+                }
+                else if(!Misc::OpenFolder(hwndDlg, szFolder))
+                {
+                    GLog->Logf(L"Deus Exe: Failed to open the save folder '%s'.", szFolder);
+                }
+                return TRUE;
+            }
+
             if(pThis && (pNMH->hwndFrom == pThis->m_hWndWebsite || pNMH->hwndFrom == pThis->m_hWndIniFile1 || pNMH->hwndFrom == pThis->m_hWndIniFile2))
             {
                 GConfig->Flush(FALSE);

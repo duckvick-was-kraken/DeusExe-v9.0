@@ -23,7 +23,7 @@ void CFreeSpaceFix::ReplacementFunc(UObject& UObjectThis, CFreeSpaceFix& /*FixOb
     if(!GetDiskFreeSpaceEx(pszSaveDir, &BytesAvailable, nullptr, nullptr)) //The save directory doesn't have to exist yet
     {
         wchar_t szContext[1024];
-        GLog->Logf(L"FreeSpaceFix: GetDiskFreeSpaceEx failed for '%s' (error %u); reporting 0 free bytes for %s.",
+        GLog->Logf(L"FreeSpaceFix: GetDiskFreeSpaceEx failed for '%s' (error %u); reporting 0 free for %s.",
             szSaveDirNew, GetLastError(),
             CrashReport::FormatScriptContext(szContext, _countof(szContext), &UObjectThis, Stack.Node));
         GetDiskFreeSpaceEx(nullptr, &BytesAvailable, nullptr, nullptr); //Fall back to the current directory's volume

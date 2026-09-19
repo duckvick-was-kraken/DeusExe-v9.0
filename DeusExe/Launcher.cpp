@@ -41,18 +41,9 @@ INT WINAPI WinMain(HINSTANCE /*hInInstance*/, HINSTANCE /*hPrevInstance*/, LPSTR
     FOutputDeviceErrorDeusExe Error;
     FFeedbackContextDeusExe Warn;
 
-    //If -localdata command line option present, don't use user documents for data; can't use appCmdLine() yet.
-    //Persist it in an environment variable so the mode survives an engine relaunch (which rebuilds the command line and drops our options).
-    const wchar_t* const pszLocalDataEnvVar = L"DeusExeLocalData";
-    const bool bLocalData = Misc::HasCommandLineSwitch(L"localdata") || GetEnvironmentVariable(pszLocalDataEnvVar, nullptr, 0) != 0;
-    if(bLocalData)
-    {
-        SetEnvironmentVariable(pszLocalDataEnvVar, L"1"); //Inherited by the engine's self-relaunches
-    }
-
     //A -gamename gives every name its own data directory, so even with -localdata the data no longer lives where the game is installed
     wchar_t szDataDir[MAX_PATH];
-    std::unique_ptr<FFileManagerDeusExe> pFileManager(Misc::GetDataDir(szDataDir, bLocalData) ? new FFileManagerDeusExeDataDir(szDataDir) : new FFileManagerDeusExe);
+    std::unique_ptr<FFileManagerDeusExe> pFileManager(Misc::GetDataDir(szDataDir) ? new FFileManagerDeusExeDataDir(szDataDir) : new FFileManagerDeusExe);
 
     //Load plugins before appInit so they can hook the entire start-up; must outlive appInit and the launcher. PreAppInit/PostAppInit bracket appInit.
     CPluginManager Plugins(PROJECTNAME);
@@ -218,7 +209,7 @@ CLauncher::CLauncher(CPluginManager& Plugins)
             {
                 if (!RegisterRawInput(m_hWnd))
                 {
-                    GError->Log(L"Raw input: Failed to register raw input device.");
+                    GError->Log(L"Raw input: Failed to register device.");
                 }
             }
 

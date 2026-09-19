@@ -44,6 +44,7 @@
 #define COMBO_GUISCALING                1036
 #define CHK_SUBTITLEFIX                 1037
 #define CHK_VERBOSELOGGING              1038
+#define IDC_SAVEFOLDER                  1039
 
 // Next default values for new objects
 // 
@@ -52,7 +53,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        116
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1039
+#define _APS_NEXT_CONTROL_VALUE         1040
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

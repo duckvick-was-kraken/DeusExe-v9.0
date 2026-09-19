@@ -181,14 +181,39 @@ bool Misc::HasCommandLineSwitch(const wchar_t* const pszSwitch)
 }
 
 /**
+True if -localdata was given, so configuration data, save games etc. stay with the install instead of in 'Documents'.
+*/
+bool Misc::IsLocalData()
+{
+    //Persisted in an environment variable so the mode survives an engine relaunch, which rebuilds the command line and drops our options
+    static const wchar_t* const pszLocalDataEnvVar = L"DeusExeLocalData";
+    static bool bLocalData = false;
+    static bool bDetermined = false;
+
+    if(bDetermined)
+    {
+        return bLocalData;
+    }
+    bDetermined = true;
+
+    bLocalData = HasCommandLineSwitch(L"localdata") || GetEnvironmentVariable(pszLocalDataEnvVar, nullptr, 0) != 0;
+    if(bLocalData)
+    {
+        SetEnvironmentVariable(pszLocalDataEnvVar, L"1"); //Inherited by the engine's self-relaunches
+    }
+
+    return bLocalData;
+}
+
+/**
 Returns the directory holding configuration data, save games etc.
 False if that's the game's own directory, in which case no redirection is needed at all.
 */
-bool Misc::GetDataDir(wchar_t(&pszBuf)[MAX_PATH], const bool bLocalData)
+bool Misc::GetDataDir(wchar_t(&pszBuf)[MAX_PATH])
 {
     const wchar_t* const pszGameName = GetGameName();
 
-    if(bLocalData)
+    if(IsLocalData())
     {
         if(*pszGameName == '\0')
         {
@@ -276,6 +301,41 @@ float Misc::CalcFOV(const size_t iResX, const size_t iResY)
 
     const float fFov = atanf(tanf(0.5f*GetDefaultFOV()*fDeg2Rad)*(fAspect / fDefaultAspect)) / fDeg2Rad*2.0f;
     return fFov;
+}
+
+/**
+True when the process runs under WINE/Proton rather than on Windows itself.
+Probes ntdll for wine_get_version, the export WINE documents for exactly this purpose.
+*/
+bool Misc::IsRunningUnderWine()
+{
+    const HMODULE hNtdll = GetModuleHandle(L"ntdll.dll"); //Always loaded, and GetModuleHandle takes no reference that would have to be released
+    return hNtdll != NULL && GetProcAddress(hNtdll, "wine_get_version") != nullptr;
+}
+
+/**
+Opens a directory in the file manager.
+
+Handing the path to the shell under WINE would open WINE's own file manager, which is of little use for getting at the
+files from the desktop. winebrowser.exe is WINE's bridge to the native handlers: it converts the path to a Unix one and
+runs xdg-open (or whatever HKCU\Software\Wine\WineBrowser lists), so the desktop's own file manager opens instead.
+*/
+bool Misc::OpenFolder(const HWND hWndParent, const wchar_t* const pszPath)
+{
+    assert(pszPath);
+
+    if(IsRunningUnderWine())
+    {
+        //Quoted: winebrowser tokenizes its command line like any other program, so a path with spaces would arrive split up
+        wchar_t szArgs[MAX_PATH + 3];
+        if(_snwprintf_s(szArgs, _TRUNCATE, L"\"%s\"", pszPath) < 0)
+        {
+            return false;
+        }
+        return reinterpret_cast<INT_PTR>(ShellExecute(hWndParent, L"open", L"winebrowser.exe", szArgs, nullptr, SW_SHOWNORMAL)) > 32;
+    }
+
+    return reinterpret_cast<INT_PTR>(ShellExecute(hWndParent, L"open", pszPath, nullptr, nullptr, SW_SHOWNORMAL)) > 32;
 }
 
 void Misc::CenterWindowOnMonitor(const HWND hWnd, const HMONITOR hMonitor)

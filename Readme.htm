@@ -94,6 +94,11 @@ void DeusExePluginMain(unsigned int AbiVersion, const DeusExePluginContext* Cont
 		</ul>
 
 		<h3>Changelog</h3>
+		<h4>Version 9.0.1.0 (september 18, 2026)</h4>
+		<ul>
+			<li>Added an 'Open save folder' link to the launcher, which opens the directory holding the configuration data and save games, following <code>-localdata</code> and <code>-gamename</code>. Under WINE/Proton it opens the desktop's own file manager rather than WINE's.</li>
+			<li>The script package behind the widescreen subtitle fix is now named 'SubtitleFix.u' instead of 'DeusExe.u'. Delete the leftover 'DeusExe.u' from the 'System' directory, it is no longer used.</li>
+		</ul>
 		<h4>Version 9 (august 17, 2026)</h4>
 		<ul>
 			<li>Added the <code>-gamename &lt;name&gt;</code> command-line option, so several mods can be played side by side without overwriting each other's configuration data, save games and settings. See 'New command-line options' above.</li>

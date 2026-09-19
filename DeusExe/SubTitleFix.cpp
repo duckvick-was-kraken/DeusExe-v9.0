@@ -3,6 +3,8 @@
 #include "Misc.h"
 #include "CrashReport.h"
 
+#define SCRIPTPACKAGENAME L"SubtitleFix"
+
 const wchar_t* const CSubtitleFix::sm_pszConfigString = L"SubtitleFix";
 
 CSubtitleFix::CSubtitleFix()
@@ -21,7 +23,7 @@ void CSubtitleFix::ReplacementFunc(XWindow& XWinThis, CSubtitleFix& /*Context*/,
     //Constructor function comparison is for early-out for most windows
     if (pNewClass && pNewClass->ClassConstructor == &XModalWindow::InternalConstructor && wcscmp(pNewClass->GetFullName(), L"Class DeusEx.ConWindowActive") == 0)
     {
-        UClass* const pReplacementClass = LoadClass<UObject>(nullptr, PROJECTNAME L".ConWindowActive2", PROJECTNAME, 0, nullptr);
+        UClass* const pReplacementClass = LoadClass<UObject>(nullptr, SCRIPTPACKAGENAME L".ConWindowActive2", SCRIPTPACKAGENAME, 0, nullptr);
         if (pReplacementClass)
         {
             pNewClass = pReplacementClass;
@@ -29,7 +31,7 @@ void CSubtitleFix::ReplacementFunc(XWindow& XWinThis, CSubtitleFix& /*Context*/,
         else
         {
             wchar_t szContext[1024];
-            GLog->Logf(L"SubtitleFix: replacement class 'DeusExe.ConWindowActive2' not found; keeping original for %s.",
+            GLog->Logf(L"SubtitleFix: replacement class '" SCRIPTPACKAGENAME L".ConWindowActive2' not found; keeping original for %s.",
                 CrashReport::FormatScriptContext(szContext, _countof(szContext), &XWinThis, Stack.Node));
         }
     }

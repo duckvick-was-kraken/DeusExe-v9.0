@@ -166,7 +166,7 @@ void CLevelWatcher::Update(UEngine* const pEngine)
 
         if(GLog != nullptr)
         {
-            GLog->Logf(PROJECTNAME L": level changed from '%s' to '%s' (%i actors, %.2f s since the previous change).",
+            GLog->Logf(PROJECTNAME L": level changed from '%s' to '%s' (%i actors, %.2f s since the last).",
                 m_szMap[0] != 0 ? m_szMap : L"<none>", szMap,
                 pLevel != nullptr ? pLevel->Actors.Num() : 0,
                 m_iLastChangeTicks != 0 ? (iNow - m_iLastChangeTicks) / 1000.0 : 0.0);

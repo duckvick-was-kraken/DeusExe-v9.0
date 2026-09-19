@@ -12,13 +12,19 @@ namespace Misc
 
     bool HasCommandLineSwitch(const wchar_t* const pszSwitch);
 
-    bool GetDataDir(wchar_t(&pszBuf)[MAX_PATH], const bool bLocalData);
+    bool IsLocalData();
+
+    bool GetDataDir(wchar_t(&pszBuf)[MAX_PATH]);
 
     const wchar_t* GetVersion();
 
     float GetDefaultFOV();
 
     float CalcFOV(const size_t iResX, const size_t iResY);
+
+    bool IsRunningUnderWine();
+
+    bool OpenFolder(const HWND hWndParent, const wchar_t* const pszPath);
 
     void CenterWindowOnMonitor(const HWND hWnd, const HMONITOR hMonitor);
 

@@ -14,6 +14,7 @@ private:
     HWND m_hWndIniFile1 = NULL; //!< System.ini
     HWND m_hWndIniFile2 = NULL; //!< User.ini
     HWND m_hWndWebsite = NULL;
+    HWND m_hWndSaveFolder = NULL;
     HMONITOR m_hMonitor = NULL;
 };
 

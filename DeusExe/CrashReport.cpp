@@ -327,7 +327,7 @@ namespace
         }
         else if(Info.State == MEM_FREE)
         {
-            LogDetail(L"  0x%p is unallocated: nothing is mapped from 0x%p for %Iu bytes.", pAddress, Info.BaseAddress, Info.RegionSize);
+            LogDetail(L"  0x%p is unallocated: nothing mapped from 0x%p for %Iu bytes.", pAddress, Info.BaseAddress, Info.RegionSize);
         }
         else
         {
@@ -353,7 +353,7 @@ namespace
             }
             else
             {
-                LogDetail(L"  The nearest object below 0x%p is 0x%IX bytes lower: %s.", pAddress, Scan.iNearestOffset,
+                LogDetail(L"  Nearest object below 0x%p is 0x%IX bytes lower: %s.", pAddress, Scan.iNearestOffset,
                     SafeObjectName(szObject, _countof(szObject), Scan.pNearest));
             }
         }
@@ -631,7 +631,7 @@ namespace
     void InvalidParameterHandler(const wchar_t* const pszExpression, const wchar_t* const pszFunction, const wchar_t* const pszFile, const unsigned int iLine, const uintptr_t /*pReserved*/)
     {
         static wchar_t szReason[1024];
-        _snwprintf_s(szReason, _TRUNCATE, L"Invalid parameter passed to '%s' (%s, %s line %u).\r\n",
+        _snwprintf_s(szReason, _TRUNCATE, L"Invalid parameter to '%s' (%s, %s line %u).\r\n",
             pszFunction != nullptr ? pszFunction : L"<unknown function>",
             pszExpression != nullptr ? pszExpression : L"<no expression>",
             pszFile != nullptr ? pszFile : L"<no file>", iLine);
@@ -726,15 +726,15 @@ void CrashReport::LogFault(const EXCEPTION_POINTERS* const pExceptionInfo)
             LogDetail(L"--- Call stack ---");
             LogCallStack(*pContext);
 
-            LogDetail(L"--- Objects on the stack ---");
+            LogDetail(L"--- Stack objects ---");
             LogStackObjects(*pContext);
         }
         else
         {
-            LogDetail(L"  No fault context was recorded, so there is no call stack or register state.");
+            LogDetail(L"  No fault context recorded: no call stack or registers.");
         }
 
-        LogDetail(L"--- Recently opened files ---");
+        LogDetail(L"--- Recent files ---");
         LogRecentFiles();
 
         LogDetail(L"--- Address space ---");
